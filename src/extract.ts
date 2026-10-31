@@ -122,6 +122,8 @@ function priorFor(
 			return -Infinity;
 	} else {
 		if (quantityUnits.includes(token.unit ?? "") || rate) return -Infinity;
+		// `10,00 x 2,000` multiplies: the number before the sign is a quantity.
+		if (/^\s*[x×*]/.test(token.after)) return -Infinity;
 		if (names("total", label)) score += 1;
 		if (token.unit === "money" || token.currency) score += 0.4;
 		if (/subtotal|sub total|netto|neto|liquido|base/i.test(label)) score -= 0.6;
@@ -264,6 +266,34 @@ function solve(
 			? printedTotal
 			: null;
 	return { quantity, unitPrice, total, balanced: false };
+}
+
+const FUEL_QUANTITY_UNITS = ["litre", "gallon", "kwh", "mass", "volume-gas"];
+
+/**
+ * Whether the paper says the solved triple is fuel or energy: a volume, mass
+ * or kWh unit on the quantity, a per-unit rate on the price, or a fuel named
+ * on the triple's line or the line above it.
+ */
+function measuresFuel(
+	quantity: NumberToken | undefined,
+	rate: NumberToken | undefined,
+	lines: readonly OcrLine[],
+): boolean {
+	if (quantity?.unit && FUEL_QUANTITY_UNITS.includes(quantity.unit))
+		return true;
+	if (rate?.unit?.startsWith("per-") && rate.unit !== "per-unit") return true;
+	const lineIndexes = new Set<number>();
+	for (const token of [quantity, rate]) {
+		if (!token) continue;
+		lineIndexes.add(token.lineIndex);
+		if (token.lineIndex > 0) lineIndexes.add(token.lineIndex - 1);
+	}
+	for (const index of lineIndexes) {
+		const line = lines[index];
+		if (line && fuelTypeIdFor(line.text) !== null) return true;
+	}
+	return false;
 }
 
 function sourceOf(token: NumberToken): FieldSource {
@@ -516,7 +546,13 @@ export function extractReceipt(
 	// Conflicting printed dimensions are not missing evidence. Keep the
 	// quantity's explicit unit and leave the unrelated rate for the original
 	// form to complete, rather than relabelling both with a preference.
-	const arithmeticChecked = solution.balanced && !conflictingRate;
+	// A sum that closes proves the arithmetic, not the purchase: a shop line
+	// (`2 x 5,00 10,00`) closes as well as the pump's. It counts as checked
+	// only when the paper also says the triple measures fuel or energy.
+	const arithmeticChecked =
+		solution.balanced &&
+		!conflictingRate &&
+		measuresFuel(quantityToken, rateToken, lines);
 	const odometer = odometerOf(tokens, lines);
 	const odoText = odometer?.source ? lines[odometer.source.lineIndex].text : "";
 	const odometerUnit = /\b(mi|mls|miles|mileage|miglia)\b/i.test(odoText)

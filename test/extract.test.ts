@@ -495,3 +495,47 @@ describe("a rate column headed by a price word", () => {
 		expect(receipt.arithmeticChecked).toBe(true);
 	});
 });
+
+describe("a second complete triple that is not fuel", () => {
+	// Fuel at 10 L x 2.000 = 20.00 and a shop item at 2 x 5.00 = 10.00 both
+	// close. With the units and product names lost, nothing says which one is
+	// the fill-up, so neither may come back checked.
+	it.each([
+		[
+			"bare lines, no grand total",
+			["10,00 x 2,000 20,00 EUR", "2 x 5,00 10,00 EUR"],
+		],
+		["shop line first", ["2 x 5,00 10,00 EUR", "10,00 x 2,000 20,00 EUR"]],
+		[
+			"a shop product name and a total that matches it",
+			["10,00 x 2,000 20,00", "CAFE 2 x 5,00", "TOTAL 10,00 EUR"],
+		],
+		[
+			"only the shop line complete",
+			["10,00 x 2,000", "2 x 5,00 10,00", "TOTAL 10,00 EUR"],
+		],
+	])("stays unchecked: %s", (_name, rows) => {
+		expect(read(rows).arithmeticChecked).toBe(false);
+	});
+
+	it("checks the fuel triple when its unit survives", () => {
+		const receipt = read([
+			"GASOLINA 95",
+			"10,00 L x 2,000 EUR/L 20,00 EUR",
+			"2 x 5,00 10,00 EUR",
+		]);
+		expect(receipt.arithmeticChecked).toBe(true);
+		expect(receipt.quantity?.value).toBe(10);
+		expect(receipt.total?.value).toBe(20);
+	});
+
+	it("checks a bare triple when the line above names the fuel", () => {
+		const receipt = read(["GASOLEO SIMPLES", "10,00 x 2,000 20,00 EUR"]);
+		expect(receipt.arithmeticChecked).toBe(true);
+	});
+
+	it("never takes a number before a multiplication sign as the total", () => {
+		const receipt = read(["10,00 x 2,000 20,00 EUR", "2 x 5,00 10,00 EUR"]);
+		expect(receipt.total?.value).not.toBe(10);
+	});
+});

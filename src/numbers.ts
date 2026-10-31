@@ -376,7 +376,10 @@ function unitFor(before: string, after: string): TokenUnit | null {
 export function samePlace(a: NumberToken, b: NumberToken): boolean {
 	if (a === b) return true;
 	if (a.lineIndex !== b.lineIndex) return false;
-	return a.span.from <= b.span.to + 1 && b.span.from <= a.span.to + 1;
+	// The slack is for alternates only. Between two preferred readings it
+	// would merge neighbours one space apart, as in `x 2,000 20,00`.
+	const slack = a.alternate || b.alternate ? 2 : 0;
+	return a.span.from < b.span.to + slack && b.span.from < a.span.to + slack;
 }
 
 /** The numbers in one transcription of a line. */
