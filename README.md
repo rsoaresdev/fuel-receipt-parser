@@ -1,5 +1,7 @@
 # fuel-receipt-parser
 
+![fuel-receipt-parser: fuel receipts to data, checked by arithmetic](.github/assets/cover.png)
+
 [![npm](https://img.shields.io/npm/v/fuel-receipt-parser.svg)](https://www.npmjs.com/package/fuel-receipt-parser)
 [![CI](https://github.com/rsoaresdev/fuel-receipt-parser/actions/workflows/ci.yml/badge.svg)](https://github.com/rsoaresdev/fuel-receipt-parser/actions/workflows/ci.yml)
 [![bundle size](https://img.shields.io/bundlephobia/minzip/fuel-receipt-parser)](https://bundlephobia.com/package/fuel-receipt-parser)
