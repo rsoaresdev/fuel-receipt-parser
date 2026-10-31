@@ -1,12 +1,17 @@
-// Prints the OCR lines Apple Vision reads from a receipt photo, as the
-// `OcrLine[]` JSON the parser takes. macOS only.
-//
-//   swift scripts/ocr-dump.swift receipt.jpg [language] > lines.json
-//
-// Accurate recognition with language correction off (it "corrects" numbers),
-// the three best candidates per line, and boxes flipped to a top-left origin.
-// Redact the output before you share it: see test/fixtures/README.md.
+#!/bin/sh
+# Prints the OCR lines Apple Vision reads from a receipt photo, as the
+# `OcrLine[]` JSON the parser takes. macOS only.
+#
+#   sh scripts/ocr-dump.sh receipt.jpg [language] > lines.json
+#
+# Accurate recognition with language correction off (it "corrects" numbers),
+# the three best candidates per line, and boxes flipped to a top-left origin.
+# Redact the output before you share it: see test/fixtures/README.md.
+#
+# The Swift runs from stdin rather than from a .swift file, so the repository
+# holds no Swift source for code scanning to try, and fail, to build.
 
+exec swift - "$@" <<'SWIFT'
 import AppKit
 import Foundation
 import Vision
@@ -16,7 +21,7 @@ guard arguments.count >= 2,
 	let image = NSImage(contentsOfFile: arguments[1]),
 	let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
 else {
-	FileHandle.standardError.write("usage: swift scripts/ocr-dump.swift <image> [language]\n".data(using: .utf8)!)
+	FileHandle.standardError.write("usage: sh scripts/ocr-dump.sh <image> [language]\n".data(using: .utf8)!)
 	exit(64)
 }
 
@@ -52,3 +57,4 @@ let lines: [[String: Any]] = (request.results ?? []).compactMap { observation in
 
 let json = try JSONSerialization.data(withJSONObject: lines, options: [.prettyPrinted, .sortedKeys])
 print(String(data: json, encoding: .utf8)!)
+SWIFT

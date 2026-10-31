@@ -8,7 +8,7 @@ Open an issue with the OCR text of the receipt, line by line, what the parser re
 
 A pull request that fixes it is even better:
 
-1. Add the case to `test/fixtures/cases.ts`, following the redaction rules in [test/fixtures/README.md](test/fixtures/README.md). On a Mac, `swift scripts/ocr-dump.swift receipt.jpg` prints the lines and boxes Apple Vision reads from a photo, the way an app hands them to the parser; redact the output before you share it.
+1. Add the case to `test/fixtures/cases.ts`, following the redaction rules in [test/fixtures/README.md](test/fixtures/README.md). On a Mac, `sh scripts/ocr-dump.sh receipt.jpg` prints the lines and boxes Apple Vision reads from a photo, the way an app hands them to the parser; redact the output before you share it.
 2. Make it pass without breaking any other test.
 3. Add a `CHANGELOG.md` entry.
 
