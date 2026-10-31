@@ -19,7 +19,11 @@ jobs:
           registry-url: https://registry.npmjs.org
           cache: npm
       - run: npm ci
-      - run: npm publish --provenance --access public
+      # Staged publishing needs npm 12. The version waits on npmjs.com until a
+      # maintainer approves it with 2FA, so a workflow alone cannot publish.
+      - run: npm install --global npm@12.2.1
+      - run: npm stage publish --provenance
+      - run: echo "Staged on npm. Approve it at https://www.npmjs.com/package/${{ github.event.repository.name }} with 2FA to publish." >> "$GITHUB_STEP_SUMMARY"
       - run: gh release create "$GITHUB_REF_NAME" --generate-notes --verify-tag
         env:
           GH_TOKEN: ${{ github.token }}
