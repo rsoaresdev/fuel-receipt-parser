@@ -1,0 +1,39 @@
+name: Receipt read wrong
+description: The parser returns a wrong or missing value for a receipt.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Never attach the photo. Remove tax numbers, addresses, card digits, transaction codes and names from the text before you post it.
+  - type: textarea
+    id: lines
+    attributes:
+      label: OCR text, one line per row
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: The context you passed
+      description: country, currency, dateOrder, now.
+      render: ts
+  - type: textarea
+    id: got
+    attributes:
+      label: What the parser returned
+      render: json
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What it should return
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Package version
+    validations:
+      required: true

@@ -1,0 +1,82 @@
+{
+	"name": "fuel-receipt-parser",
+	"version": "1.0.0",
+	"description": "Read fuel and EV charging receipts from OCR text: litres, price per litre, total, date, currency, fuel type and station. Arithmetic-checked (litres x price = total), never invents a number. Works with any OCR (Apple Vision, ML Kit, Tesseract, Google Vision). Zero dependencies.",
+	"keywords": [
+		"receipt",
+		"receipt parser",
+		"receipt ocr",
+		"fuel receipt",
+		"gas receipt",
+		"petrol receipt",
+		"fuel",
+		"gas station",
+		"ocr",
+		"ocr parser",
+		"tesseract",
+		"ml kit",
+		"apple vision",
+		"react native",
+		"expo",
+		"expense tracker",
+		"fuel log",
+		"mileage",
+		"ev charging",
+		"kwh",
+		"talao combustivel"
+	],
+	"homepage": "https://github.com/rsoaresdev/fuel-receipt-parser#readme",
+	"bugs": "https://github.com/rsoaresdev/fuel-receipt-parser/issues",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/rsoaresdev/fuel-receipt-parser.git"
+	},
+	"license": "MIT",
+	"author": "Rafael Soares (https://github.com/rsoaresdev)",
+	"type": "module",
+	"sideEffects": false,
+	"exports": {
+		".": {
+			"import": {
+				"types": "./dist/index.d.ts",
+				"default": "./dist/index.js"
+			},
+			"require": {
+				"types": "./dist/index.d.cts",
+				"default": "./dist/index.cjs"
+			}
+		},
+		"./package.json": "./package.json"
+	},
+	"main": "./dist/index.cjs",
+	"types": "./dist/index.d.cts",
+	"files": [
+		"dist",
+		"src"
+	],
+	"engines": {
+		"node": ">=20"
+	},
+	"scripts": {
+		"build": "tsdown --config-loader native",
+		"typecheck": "tsc --noEmit",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"coverage": "vitest run --coverage",
+		"lint": "biome check .",
+		"format": "biome check --write .",
+		"prepublishOnly": "npm run lint && npm run typecheck && npm run coverage && npm run build && npm run check:package",
+		"check:package": "publint && attw --pack .",
+		"smoke": "node scripts/smoke.mjs"
+	},
+	"devDependencies": {
+		"@arethetypeswrong/cli": "^0.18.5",
+		"@biomejs/biome": "^2.6.4",
+		"@vitest/coverage-v8": "^5.0.5",
+		"publint": "^0.3.25",
+		"tsdown": "^0.23.4",
+		"typescript": "^6.0.3",
+		"vitest": "^5.0.5"
+	},
+	"module": "./dist/index.js"
+}
