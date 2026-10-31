@@ -132,6 +132,21 @@ const CURRENCY_SYMBOLS = (() => {
 	add("US$", "USD");
 	add("C$", "CAD");
 	add("lei", "MDL");
+	// The local words a till prints where a catalogue would print a symbol.
+	add("rs", "INR");
+	add("rs.", "INR");
+	add("rs", "PKR");
+	add("rs.", "PKR");
+	add("円", "JPY");
+	add("원", "KRW");
+	add("元", "CNY");
+	add("元", "TWD");
+	add("tl", "TRY");
+	add("rp", "IDR");
+	add("baht", "THB");
+	add("zl", "PLN");
+	add("dhs", "AED");
+	add("dh", "MAD");
 	return [...aliases]
 		.sort(([a], [b]) => b.length - a.length)
 		.map(([mark, candidates]) => {
@@ -178,11 +193,16 @@ export function receiptCurrency(
 	return null;
 }
 
-export function regionDateOrder(country?: string): "dmy" | "mdy" | undefined {
-	if (country)
-		return ["US", "PH", "BZ", "FM", "PW"].includes(country.toUpperCase())
-			? "mdy"
-			: "dmy";
+export function regionDateOrder(
+	country?: string,
+): "dmy" | "mdy" | "ymd" | undefined {
+	if (country) {
+		const code = country.toUpperCase();
+		if (["US", "PH", "BZ", "FM", "PW"].includes(code)) return "mdy";
+		// Year first, so `26/10/31` is the 31st of October 2026.
+		if (["JP", "CN", "KR", "TW", "HU", "LT", "MN"].includes(code)) return "ymd";
+		return "dmy";
+	}
 	try {
 		const parts = new Intl.DateTimeFormat(undefined, {
 			year: "numeric",
@@ -191,7 +211,9 @@ export function regionDateOrder(country?: string): "dmy" | "mdy" | undefined {
 		}).formatToParts(new Date(2026, 0, 2));
 		const day = parts.findIndex((part) => part.type === "day");
 		const month = parts.findIndex((part) => part.type === "month");
+		const year = parts.findIndex((part) => part.type === "year");
 		if (day < 0 || month < 0) return undefined;
+		if (year >= 0 && year < month) return "ymd";
 		return day < month ? "dmy" : "mdy";
 	} catch {
 		return undefined;

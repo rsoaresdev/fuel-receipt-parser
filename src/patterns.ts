@@ -18,6 +18,8 @@
  * those, and not by guessing.
  */
 export const DATE_PATTERNS: readonly RegExp[] = [
+	// 令和8年10月31日, R8.10.31: the Japanese era, in its eighth year in 2026
+	/(?<![A-Za-z])(令和|R)\s?(\d{1,2})[年./-](\d{1,2})[月./-](\d{1,2})日?/g,
 	// 2026-08-01, 2026/08/01
 	/\b(\d{4})[-/.年](\d{1,2})[-/.月](\d{1,2})(?:日|\b)/g,
 	// 01-08-2026, 01/08/26, 1.8.2026

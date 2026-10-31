@@ -88,6 +88,8 @@ export type FuelTypeId =
 	| "diesel_simple"
 	| "diesel_aditivado"
 	| "ethanol_e85"
+	| "ethanol_e100"
+	| "hydrogen"
 	| "lpg"
 	| "cng"
 	| "adblue"
@@ -138,6 +140,52 @@ export interface ReceiptReading {
 	 * never establishes correctness by itself. See `extract.ts`.
 	 */
 	arithmeticChecked: boolean;
+	/**
+	 * What the paper sold, as far as it says.
+	 *
+	 * `fuel` when a unit, a rate or a product name says fuel or energy;
+	 * `other` when a sum closes but nothing on the paper is fuel, as on a café
+	 * receipt (`2 x 5,00 10,00`); `unknown` when there is too little to tell.
+	 */
+	kind?: ReceiptKind;
+	/**
+	 * A discount the receipt prints, for the whole fill.
+	 *
+	 * A per-litre discount (`Desc. 0,10 EUR/L`) comes back as the amount it
+	 * makes on the quantity read, and only when a quantity was read. When the
+	 * total is printed after the discount, quantity times price minus this is
+	 * what checks it.
+	 */
+	discount?: ScannedField<ReceiptDiscount> | null;
+	/**
+	 * Charges the receipt adds to the energy, summed: a session fee, an idle
+	 * fee. When the total is printed with them, quantity times price plus
+	 * these (less any discount) is what checks it.
+	 */
+	fees?: ScannedField<number> | null;
+	/**
+	 * Further fills on the same receipt, each one checked on its own line: a
+	 * diesel and an AdBlue, or two pumps. The top-level fields are the fill
+	 * the engine thought most likely; these are the others, best first.
+	 */
+	otherFills?: readonly ReceiptFill[];
+}
+
+export type ReceiptKind = "fuel" | "other" | "unknown";
+
+export interface ReceiptDiscount {
+	type: "amount" | "percent";
+	value: number;
+}
+
+/** One fill that closed on its own line. */
+export interface ReceiptFill {
+	quantity: ScannedField<number>;
+	unitPrice: ScannedField<number>;
+	total: ScannedField<number>;
+	fuelLabel: ScannedField<string> | null;
+	fuelTypeId: FuelTypeId | null;
+	quantityUnit: ReceiptUnit | null;
 }
 
 /** What the caller knows that the paper does not say. */
@@ -167,5 +215,15 @@ export interface ScanContext {
 	 * takes it from the device's locale. Absent, the engine falls back to
 	 * whichever reading is nearer to today and lowers its confidence to say so.
 	 */
-	dateOrder?: "dmy" | "mdy";
+	dateOrder?: "dmy" | "mdy" | "ymd";
+	/**
+	 * The vehicle's tank, in litres, when the caller knows it.
+	 *
+	 * Used for one thing: when a recogniser drops the decimal separator from
+	 * two numbers by the same factor, the sum still closes on the wrong
+	 * reading (`4000 L x 1,500 = 6000` for `40,00 x 1,500 = 60,00`). The
+	 * arithmetic cannot tell the two apart; a tank of 60 litres can. Without
+	 * it such a reading comes back unchecked.
+	 */
+	tankCapacityLitres?: number;
 }

@@ -2,12 +2,16 @@ export { CURRENCIES, type Currency, currencyDecimals } from "./currencies.js";
 export { extractReceipt } from "./extract.js";
 export { fuelTypeIdFor, KNOWN_BRANDS } from "./labels.js";
 export { betterReading, wantsSecondPass } from "./read.js";
+export { receiptRecognitionLanguage, regionDateOrder } from "./region.js";
 export type {
 	EnergyMode,
 	FieldSource,
 	FuelTypeId,
 	OcrLine,
 	OcrWord,
+	ReceiptDiscount,
+	ReceiptFill,
+	ReceiptKind,
 	ReceiptReading,
 	ReceiptUnit,
 	ScanContext,

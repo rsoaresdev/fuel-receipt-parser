@@ -45,6 +45,8 @@ export interface NumberToken {
 	before: string;
 	/** Everything printed after it on its line, lowercased. */
 	after: string;
+	/** The column heading above it, when nothing on its own line labels it. */
+	heading?: string;
 	/** ISO 4217, when a currency mark was touching the number. */
 	currency: string | null;
 	unit: TokenUnit | null;
@@ -89,7 +91,8 @@ export interface NumberToken {
 }
 
 /** Volume words, in the six base languages and their abbreviations. */
-const LITRE = "l|lt|lts|ltr|lit|litro|litros|litre|litres|liter|litri";
+const LITRE =
+	"l|lt|lts|ltr|lit|litro|litros|litre|litres|liter|litri|litry|litru|litraa|ℓ|リットル|リッター|升|리터|لتر";
 const GALLON =
 	"(?:(?:us|uk|imp(?:erial)?\\.?)\\s+)?(?:gal|gals|gallon|gallons)";
 const MASS = "kg|kgs|kilogram|kilograms|kilogramme|chilogrammi";
@@ -98,32 +101,47 @@ const KWH = "kwh|kw\\.h|kw h|quilowatt|kilowatt";
 
 /** `EUR/Lit`, `€ / L`, `EUR/kWh` - a rate, and the strongest signal there is. */
 const RATE_AFTER = new RegExp(
-	`^[\\s]*(?:${CURRENCY_PATTERN})?\\s*\\/\\s*(${LITRE}|${GALLON}|${KWH}|${MASS}|${GAS_VOLUME})\\b`,
+	`^[\\s]*(?:${CURRENCY_PATTERN})?\\s*\\/\\s*(${LITRE}|${GALLON}|${KWH}|${MASS}|${GAS_VOLUME})(?![a-z0-9])`,
 	"i",
 );
 /** A price word that can head a rate column in place of the currency: `PVP/L`, `Preço/L`. */
 const PRICE_WORD =
-	"pre[cç]o|precio|prix|price|preis|prezzo|pvp|p\\.?\\s?u\\.?|tarifa|tarif|rate";
+	"pre[cç]o|precio|prix|price|preis|prezzo|pvp|p\\.?\\s?u\\.?|tarifa|tarif|rate|prijs|cena|fiyat|pris|hinta|harga|単価|단가|单价|單價";
 /**
  * The same rate written before the value, as a column heading. Without the
  * price word, `PVP/L 1,659` would fall through to `UNIT_BEFORE`, which reads
- * the `L` as litres and the price as a quantity.
+ * the `L` as litres and the price as a quantity. A currency mark may sit
+ * between the heading and the value, as on a US pump: `PRICE/GAL $3.459`.
  */
 const RATE_BEFORE = new RegExp(
-	`(?:${CURRENCY_PATTERN}|\\b(?:${PRICE_WORD}))\\s*\\/\\s*(${LITRE}|${GALLON}|${KWH}|${MASS}|${GAS_VOLUME})\\s*[:.]?\\s*$`,
+	`(?:${CURRENCY_PATTERN}|(?<![a-z])(?:${PRICE_WORD}))\\s*\\/\\s*(${LITRE}|${GALLON}|${KWH}|${MASS}|${GAS_VOLUME})\\s*[:.]?\\s*(?:${CURRENCY_PATTERN})?\\s*$`,
+	"i",
+);
+/**
+ * A price in hundredths of the currency, as pumps in the UK, Ireland,
+ * Australia and New Zealand print it: `155.9p`, `179.9 c/L`, `155.9 ppl`.
+ * A bare `p` or `c` counts only where a price stands (after `@`, `x` or a
+ * price word), so `25 C` on a thermometer line stays a number.
+ */
+const SUBUNIT_RATE = new RegExp(
+	`^\\s*(?:p|c|ct|cts|¢)(?:\\s*\\/\\s*(${LITRE}|${GALLON})|(pl))?(?![a-z0-9])`,
+	"i",
+);
+const PRICE_POSITION = new RegExp(
+	`(?:[@x×*]|(?<![a-z])(?:${PRICE_WORD})[^\\d]{0,12})\\s*$`,
 	"i",
 );
 /** `x 1,899` on a fuel line: a rate by position, with no unit printed at all. */
-const TIMES_BEFORE = /(?:^|[\s\d])[x*×]\s*$/i;
+const TIMES_BEFORE = /(?:^|[\s\d])[x*×@]\s*$/i;
 
 const UNIT_AFTER = new RegExp(
-	`^[\\s]*(?:(${LITRE})|(${GALLON})|(${KWH})|(${CURRENCY_PATTERN})|(%)|(km|kms|mi|mls|miles)|(${MASS})|(${GAS_VOLUME}))(?![a-zA-Z])`,
+	`^[\\s]*(?:(${LITRE})|(${GALLON}|g(?=\\s*[@x×*]))|(${KWH})|(${CURRENCY_PATTERN})|(%)|(km|kms|mi|mls|miles)|(${MASS})|(${GAS_VOLUME}))(?![a-zA-Z])`,
 	"i",
 );
 const CURRENCY_BEFORE = new RegExp(`(?:${CURRENCY_PATTERN})\\s*$`, "i");
 /** `Litros 15,24` - the column layout, where the unit heads its value. */
 const UNIT_BEFORE = new RegExp(
-	`\\b(${LITRE}|${GALLON}|${KWH}|${MASS}|${GAS_VOLUME})\\s*[:.]?\\s*$`,
+	`(?<![a-z0-9])(${LITRE}|${GALLON}|${KWH}|${MASS}|${GAS_VOLUME})\\s*[:.]?\\s*$`,
 	"i",
 );
 
@@ -333,7 +351,7 @@ function plainKind(word: string): TokenUnit {
  * column layout it never does; in the inline layout it always does, because
  * the value the unit really belongs to is right there in it.
  */
-function unitFor(before: string, after: string): TokenUnit | null {
+export function unitFor(before: string, after: string): TokenUnit | null {
 	const rateAfter = RATE_AFTER.exec(after);
 	if (rateAfter) return rateKind(rateAfter[1] ?? "");
 
@@ -403,15 +421,24 @@ function tokensIn(
 		if (values.length > 0) {
 			const before = text.slice(0, from);
 			const after = text.slice(to);
+			const subunit = SUBUNIT_RATE.exec(after);
+			const hundredths =
+				subunit && (subunit[1] || subunit[2] || PRICE_POSITION.test(before))
+					? subunit
+					: null;
 			tokens.push({
-				readings: values,
+				readings: hundredths
+					? values.map((value) => Math.round(value * 1e4) / 1e6)
+					: values,
 				implied,
 				lineIndex,
 				box: boxForRange(line, from, to),
 				before: before.toLowerCase(),
 				after: after.toLowerCase(),
 				currency: lineCurrency,
-				unit: unitFor(before, after),
+				unit: hundredths
+					? rateKind(hundredths[1] ?? "l")
+					: unitFor(before, after),
 				repaired,
 				partOfDateTime: overlapsAny(stamps, from, to),
 				glued: /[a-zà-ÿ]$/i.test(before) || /^[a-zà-ÿ]/i.test(after),

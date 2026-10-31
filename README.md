@@ -64,11 +64,11 @@ Most receipt parsers look for the word "total" and hope. A fuel receipt is harde
 
 This parser treats the receipt as a sum to solve:
 
-- **Arithmetic is the judge.** It searches for the three numbers where quantity × unit price = total. When it finds them, `arithmeticChecked` is `true`. That is also how it settles an ambiguous `1,899`.
+- **Arithmetic is the judge.** It searches for the three numbers where quantity × unit price = total, less any discount the paper prints. When it finds them, `arithmeticChecked` is `true`. That is also how it settles an ambiguous `1,899`.
 - **It never invents.** A printed number is never replaced by a computed one. When a value is missing, the field is `null`. When three numbers disagree, all three come back unchecked for a person to settle.
 - **Every value says where it came from.** Each field carries the line index and a normalised box on the page, so a review screen can highlight the exact words a value was read from.
-- **It reads many layouts and languages.** Inline lines (`31,93 Lit x 1,899 EUR/Lit 60,64 EUR`), label columns (`Litros 15,24`), US gallons, kWh for EV charging, kg for CNG, and labels in Portuguese, Spanish, French, Italian, German and English.
-- **It handles dates properly.** `08/09/2026` is resolved from the paper when possible (a four-digit year, a component over twelve, a month spelled out) and from the reader's region only as a last resort, with lower confidence.
+- **It reads many layouts and languages.** Inline lines (`31,93 Lit x 1,899 EUR/Lit 60,64 EUR`), label columns (`Litros 15,24`), tables with the headings above the values, rows your OCR split at a wide gap, tilted photos, US gallons with `G @` and a price to the tenth of a cent, prices in pence or cents per litre (`155.9p`, `179.9 c/L`), kWh for EV charging with session fees, kg for CNG and hydrogen, and labels in Portuguese, Spanish, French, Italian, German and English, with the receipt words of Dutch, Turkish, Polish, Czech, Hungarian, the Nordic languages, Japanese, Korean, Chinese and Arabic.
+- **It handles dates properly.** `08/09/2026` is resolved from the paper when possible (a four-digit year, a component over twelve, a month spelled out) and from the reader's region only as a last resort, with lower confidence. The Thai Buddhist year and the Japanese era are converted, and a region that writes the year first reads `26/10/31` as 31 October 2026.
 
 ## Connecting your OCR
 
@@ -126,7 +126,8 @@ if (wantsSecondPass(reading)) {
 | `currency`     | `string`         | ISO 4217 code to assume when the receipt prints none.                                         |
 | `quantityUnit` | `ReceiptUnit`    | Unit to assume when the receipt prints none.                                                  |
 | `brands`       | `string[]`       | Station names to look for. Defaults to `KNOWN_BRANDS`.                                        |
-| `dateOrder`    | `"dmy" \| "mdy"` | How the reader's region writes numeric dates, the last resort for `08/09/2026`.               |
+| `dateOrder`    | `"dmy" \| "mdy" \| "ymd"` | How the reader's region writes numeric dates, the last resort for `08/09/2026`. `regionDateOrder(country)` gives it. |
+| `tankCapacityLitres` | `number` | The vehicle's tank. When the OCR drops the separator from two numbers alike (`4000 x 1,500 = 6000` for `40,00 x 1,500 = 60,00`), the sum closes either way; the tank settles it. Without it such a reading is unchecked. |
 | `now`          | `Date`           | Anchors two-digit years and rejects dates far in the future. Defaults to the current date.    |
 
 ### `ReceiptReading`
@@ -152,8 +153,10 @@ interface ScannedField<T> {
 | `fuelLabel` | Product as printed, for example `"GASOLEO SIMPLES"`.                                  |
 | `place`     | Station brand, spelled as the brand list spells it.                                   |
 | `odometer`  | Only when the receipt prints one.                                                     |
+| `discount`  | `{ type: "amount" \| "percent", value }` the receipt prints. A per-litre discount comes back as its amount. |
+| `fees`      | Charges added to the energy, summed: an EV session fee, an idle fee. |
 
-Plain fields: `fuelTypeId` (`"gasoline_95"`, `"gasoline_98"`, `"diesel_simple"`, `"diesel_aditivado"`, `"ethanol_e85"`, `"lpg"`, `"cng"`, `"adblue"`, `"electric"` or `null`), `quantityUnit` (`"L"`, `"gal"`, `"gallon_us"`, `"gallon_uk"`, `"kg"`, `"m3"`, `"kWh"` or `null`), `odometerUnit`, `energyMode` (`"fuel"` or `"charge"`) and `arithmeticChecked`.
+Plain fields: `fuelTypeId` (`"gasoline_95"`, `"gasoline_98"`, `"diesel_simple"`, `"diesel_aditivado"`, `"ethanol_e85"`, `"ethanol_e100"`, `"hydrogen"`, `"lpg"`, `"cng"`, `"adblue"`, `"electric"` or `null`), `quantityUnit` (`"L"`, `"gal"`, `"gallon_us"`, `"gallon_uk"`, `"kg"`, `"m3"`, `"kWh"` or `null`), `odometerUnit`, `energyMode` (`"fuel"` or `"charge"`), `arithmeticChecked`, `kind` (`"fuel"`, `"other"` for a receipt whose sum closes but sells no fuel, or `"unknown"`) and `otherFills`: further fills on the same receipt (a diesel and an AdBlue), each one checked on its own line, with its own `quantity`, `unitPrice`, `total`, `fuelLabel`, `fuelTypeId` and `quantityUnit`.
 
 Use `confidence` to decide which fields to show as read and which to leave for the user to fill in. It is not meant to be shown as a percentage.
 
@@ -161,6 +164,8 @@ Use `confidence` to decide which fields to show as read and which to leave for t
 
 - `wantsSecondPass(reading)` and `betterReading(first, second)`: see above.
 - `fuelTypeIdFor(text)`: the fuel kind of a product name, or `null`.
+- `regionDateOrder(country?)`: `"dmy"`, `"mdy"` or `"ymd"` for an ISO 3166 country, or from the device's locale when none is given. Pass it as `context.dateOrder`.
+- `receiptRecognitionLanguage(country, language)`: the language to ask your OCR to read in: the country's script where the reader's language cannot read it (`ja` in Japan, `ko` in Korea), else the reader's own.
 - `KNOWN_BRANDS`: the default station list.
 - `CURRENCIES` and `currencyDecimals(code)`: the currencies the parser recognises.
 

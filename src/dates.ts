@@ -119,8 +119,13 @@ function monthFromName(word: string): number | null {
 	return best;
 }
 
-/** Two digits become a year in this century, which tills have printed since. */
+/**
+ * Two digits become a year in this century, which tills have printed since.
+ * A year past 2400 is the Thai Buddhist calendar (2569 is 2026), which is
+ * 543 years ahead and is no year a receipt could otherwise carry.
+ */
 function fullYear(value: number): number {
+	if (value >= 2400 && value < 2800) return value - 543;
 	if (value >= 1000) return value;
 	return value >= 70 ? 1900 + value : 2000 + value;
 }
@@ -147,7 +152,7 @@ function withinWindow(day: string, now: Date): boolean {
 }
 
 /** Every date-shaped run on the page, with its layout resolved as far as it can be. */
-function collect(lines: readonly OcrLine[]): DateHit[] {
+function collect(lines: readonly OcrLine[], yearFirst: boolean): DateHit[] {
 	const hits: DateHit[] = [];
 	lines.forEach((line, lineIndex) => {
 		for (const pattern of DATE_PATTERNS) {
@@ -156,7 +161,7 @@ function collect(lines: readonly OcrLine[]): DateHit[] {
 			while (match) {
 				const hit = embeddedInLongerRun(line.text, match)
 					? null
-					: interpret(match, lineIndex);
+					: interpret(match, lineIndex, yearFirst);
 				if (hit && !hits.some((other) => overlaps(other, hit))) hits.push(hit);
 				match = pattern.exec(line.text);
 			}
@@ -185,9 +190,25 @@ function overlaps(a: DateHit, b: DateHit): boolean {
 	return a.lineIndex === b.lineIndex && a.from < b.to && a.to > b.from;
 }
 
-function interpret(match: RegExpExecArray, lineIndex: number): DateHit | null {
-	const [whole, one, two, three] = match;
+function interpret(
+	match: RegExpExecArray,
+	lineIndex: number,
+	yearFirst: boolean,
+): DateHit | null {
+	const [whole, one, two, three, four] = match;
 	const base = { lineIndex, from: match.index, to: match.index + whole.length };
+
+	// 令和8年10月31日: Reiwa began in 2019, its first year.
+	if (one === "令和" || one === "R") {
+		return {
+			...base,
+			day: Number(four),
+			month: Number(three),
+			year: 2018 + Number(two),
+			ambiguous: null,
+			proves: null,
+		};
+	}
 
 	// AUG 01, 2026
 	const leadingMonth = monthFromName(one);
@@ -215,13 +236,31 @@ function interpret(match: RegExpExecArray, lineIndex: number): DateHit | null {
 		};
 	}
 
-	// 2026-08-01
+	// 2026-08-01, and 2569-10-31 on a Thai till
 	if (one.length === 4) {
 		return {
 			...base,
 			day: Number(three),
 			month: Number(two),
-			year: Number(one),
+			year: fullYear(Number(one)),
+			ambiguous: null,
+			proves: null,
+		};
+	}
+
+	// 26/10/31 where the region writes the year first. Only by region: the
+	// same digits are the 26th of October 2031 in Lisbon.
+	if (
+		yearFirst &&
+		one.length === 2 &&
+		three.length === 2 &&
+		/^\d+$/.test(two)
+	) {
+		return {
+			...base,
+			day: Number(three),
+			month: Number(two),
+			year: fullYear(Number(one)),
 			ambiguous: null,
 			proves: null,
 		};
@@ -255,7 +294,7 @@ function interpret(match: RegExpExecArray, lineIndex: number): DateHit | null {
 export function readDate(
 	lines: readonly OcrLine[],
 	now: Date,
-	regionOrder?: "dmy" | "mdy",
+	regionOrder?: "dmy" | "mdy" | "ymd",
 ): ScannedField<string> | null {
 	lines = lines.map((line) => ({
 		...line,
@@ -263,7 +302,7 @@ export function readDate(
 	}));
 	const ignored =
 		/member since|loyalty|valid|expir|warranty|adesao|adesão|fidelidade|validade|vencimento|caducidad|garantie|gultig|gültig|scadenza/i;
-	const hits = collect(lines).filter(
+	const hits = collect(lines, regionOrder === "ymd").filter(
 		(hit) => !ignored.test(lines[hit.lineIndex].text),
 	);
 	if (hits.length === 0) return null;
@@ -293,7 +332,9 @@ export function readDate(
 	// best evidence there is. It is still evidence about the READER and not
 	// about the till, so it never overrides a proof, and a date resolved this
 	// way says so in its confidence.
-	const dayFirst = proven ?? (regionOrder ? regionOrder === "dmy" : null);
+	const dayFirst =
+		proven ??
+		(regionOrder === "dmy" ? true : regionOrder === "mdy" ? false : null);
 	const byRegion = proven === null && regionOrder !== undefined;
 
 	const readings: { day: string; confidence: number; hit: DateHit }[] = [];

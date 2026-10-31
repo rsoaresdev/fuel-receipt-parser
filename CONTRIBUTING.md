@@ -8,7 +8,7 @@ Open an issue with the OCR text of the receipt, line by line, what the parser re
 
 A pull request that fixes it is even better:
 
-1. Add the case to `test/fixtures/cases.ts`, following the redaction rules in [test/fixtures/README.md](test/fixtures/README.md).
+1. Add the case to `test/fixtures/cases.ts`, following the redaction rules in [test/fixtures/README.md](test/fixtures/README.md). On a Mac, `swift scripts/ocr-dump.swift receipt.jpg` prints the lines and boxes Apple Vision reads from a photo, the way an app hands them to the parser; redact the output before you share it.
 2. Make it pass without breaking any other test.
 3. Add a `CHANGELOG.md` entry.
 
@@ -20,7 +20,7 @@ Before you share any receipt text, remove or replace tax identifiers, addresses,
 
 - A number printed on the paper is never replaced by a computed one.
 - A missing value stays `null`.
-- `arithmeticChecked` is `true` only when quantity × unit price comes to the total.
+- `arithmeticChecked` is `true` only when quantity × unit price comes to the total, less a discount the paper prints.
 
 A change that breaks one of these is not accepted, even if it makes a test pass.
 

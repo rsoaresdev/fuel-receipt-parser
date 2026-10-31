@@ -10,14 +10,20 @@ import {
 	fuelTypeIdFor,
 	looksLikeProduct,
 	names,
+	namesDiscount,
+	namesFee,
 	namesSomethingElse,
 } from "./labels.js";
 import { type NumberToken, samePlace, tokenize } from "./numbers.js";
 import { countryCurrency, receiptCurrency, regionDateOrder } from "./region.js";
+import { joinRows, labelColumns } from "./rows.js";
 import type {
 	EnergyMode,
 	FieldSource,
 	OcrLine,
+	ReceiptDiscount,
+	ReceiptFill,
+	ReceiptKind,
 	ReceiptReading,
 	ReceiptUnit,
 	ScanContext,
@@ -60,9 +66,13 @@ const SEARCH_WIDTH = 20;
  */
 const LABEL_REACH = 64;
 
-/** The label nearest a number: what precedes it, else the start of its line. */
+/**
+ * The label nearest a number: what precedes it, else the column heading above
+ * it, else the start of its line.
+ */
 function contextFor(token: NumberToken, lines: readonly OcrLine[]): string {
 	const before = token.before.trim();
+	if (token.heading && !/\p{L}/u.test(before)) return token.heading;
 	return before.length > 0
 		? before.slice(-LABEL_REACH)
 		: lines[token.lineIndex].text.slice(0, LABEL_REACH);
@@ -92,6 +102,16 @@ function priorFor(
 		currencyDecimals(token.currency ?? fallbackCurrency ?? "EUR") === 0;
 	if (slot === "total" && wholeMoney && !Number.isInteger(value))
 		return -Infinity;
+	// `1,650 원`: in a currency with no minor unit, the smaller reading of a
+	// number that has two is the separator taken for a decimal point.
+	if (
+		slot !== "quantity" &&
+		wholeMoney &&
+		token.implied === 0 &&
+		token.readings.length > 1 &&
+		value === Math.min(...token.readings)
+	)
+		return -Infinity;
 	if (/[-−]\s*[\p{Sc}]?\s*$/u.test(token.before)) return -Infinity;
 	const label = contextFor(token, lines);
 	if (token.unit === "percent" || token.unit === "distance") return -Infinity;
@@ -103,7 +123,7 @@ function priorFor(
 		if (value > 99_999 || rate || token.unit === "money") return -Infinity;
 		if (quantityUnits.includes(token.unit ?? "")) score += 1;
 		if (names("quantity", label)) score += 0.7;
-		if (/^\s*[x×*]/.test(token.after)) score += 0.65;
+		if (/^\s*[x×*@]/.test(token.after)) score += 0.65;
 		if (
 			!quantityUnits.includes(token.unit ?? "") &&
 			(names("total", label) || names("unitPrice", label))
@@ -123,9 +143,14 @@ function priorFor(
 	} else {
 		if (quantityUnits.includes(token.unit ?? "") || rate) return -Infinity;
 		// `10,00 x 2,000` multiplies: the number before the sign is a quantity.
-		if (/^\s*[x×*]/.test(token.after)) return -Infinity;
+		if (/^\s*[x×*@]/.test(token.after)) return -Infinity;
 		if (names("total", label)) score += 1;
 		if (token.unit === "money" || token.currency) score += 0.4;
+		// The amount that closes an `a x b` line: `42,15 L x 1,589 EUR/L 66,98`.
+		if (
+			/[x×*@]\s*\p{Sc}?\s*\d[\d.,]*\s*(?:[^\d\s]+\s*\/\s*\S+)?\s*$/u.test(label)
+		)
+			score += 0.4;
 		if (/subtotal|sub total|netto|neto|liquido|base/i.test(label)) score -= 0.6;
 	}
 	if (score < 0.35) return -Infinity;
@@ -151,6 +176,16 @@ function candidatesFor(
 	const out: Candidate[] = [];
 	for (const token of tokens) {
 		token.readings.forEach((value, rank) => {
+			const implied = rank >= token.readings.length - token.implied;
+			// A separator the recogniser dropped from a total put back where the
+			// currency puts it: `6000` may be 60,00 euros, never 6,000.
+			if (
+				slot === "total" &&
+				implied &&
+				Math.round(Math.log10(token.readings[0] / value)) !==
+					currencyDecimals(token.currency ?? fallbackCurrency ?? "EUR")
+			)
+				return;
 			const score = priorFor(slot, value, token, lines, fallbackCurrency);
 			if (!Number.isFinite(score)) return;
 			// A token's second reading is its less likely one; break the tie
@@ -163,7 +198,7 @@ function candidatesFor(
 					rank * 0.05 +
 					Math.max(0, Math.min(1, lines[token.lineIndex].confidence ?? 0)) *
 						0.02,
-				implied: rank >= token.readings.length - token.implied,
+				implied,
 			});
 		});
 	}
@@ -177,6 +212,13 @@ interface Solution {
 	total: Candidate | null;
 	/** True only when three READ numbers multiplied out. */
 	balanced: boolean;
+	/**
+	 * Other readings of the same three numbers that close as well, through
+	 * a decimal separator the recogniser dropped: `4000 x 1,500 = 6000` and
+	 * `40,00 x 1,500 = 60,00` are one piece of paper. Empty when the sum
+	 * picks a single reading.
+	 */
+	rivals: Solution[];
 }
 
 function balances(
@@ -202,29 +244,46 @@ function solve(
 		totals.find((c) => !c.implied && !c.token.alternate) ?? null;
 	let best: Solution | null = null;
 	let bestScore = -Infinity;
+	const closing: Solution[] = [];
+	const closes = (q: Candidate, p: Candidate, t: Candidate | null) =>
+		!!t &&
+		!samePlace(t.token, q.token) &&
+		!samePlace(t.token, p.token) &&
+		balances(q, p, t, fallbackCurrency);
 	for (const q of quantities)
 		for (const p of prices) {
 			if (samePlace(q.token, p.token)) continue;
-			const t = printedTotal;
-			const balanced =
-				!!t &&
-				!samePlace(t.token, q.token) &&
-				!samePlace(t.token, p.token) &&
-				balances(q, p, t, fallbackCurrency);
+			// A receipt with a shop item too totals more than the fuel. The
+			// amount printed on the fuel line itself is the pump's own sum, so
+			// it may close the triple when the receipt's total does not.
+			const t = closes(q, p, printedTotal)
+				? printedTotal
+				: (totals.find(
+						(c) =>
+							!c.implied &&
+							!c.token.alternate &&
+							(c.token.lineIndex === q.token.lineIndex ||
+								c.token.lineIndex === p.token.lineIndex) &&
+							closes(q, p, c),
+					) ?? printedTotal);
+			const balanced = closes(q, p, t);
 			if (
 				(q.implied || p.implied || q.token.alternate || p.token.alternate) &&
 				!balanced
 			)
 				continue;
-			const score = q.score + p.score + (balanced ? 1 : 0);
-			if (score <= bestScore) continue;
-			bestScore = score;
-			best = {
+			const found = {
 				quantity: q,
 				unitPrice: p,
 				total: t,
 				balanced,
+				rivals: [],
 			};
+			if (balanced) closing.push(found);
+			const score = q.score + p.score + (balanced ? 1 : 0);
+			if (score <= bestScore) continue;
+			bestScore = score;
+			best = found;
 		}
 	// An alternate total may repair one misread digit, but must clear the same label floor.
 	for (const q of quantities)
@@ -238,18 +297,40 @@ function solve(
 				)
 					continue;
 				if (!balances(q, p, t, fallbackCurrency)) continue;
-				const score =
-					q.score + p.score + t.score + 1 - (printedTotal?.score ?? 0);
-				if (score <= bestScore) continue;
-				bestScore = score;
-				best = {
+				const found = {
 					quantity: q,
 					unitPrice: p,
 					total: t,
 					balanced: true,
+					rivals: [],
 				};
+				closing.push(found);
+				const score =
+					q.score + p.score + t.score + 1 - (printedTotal?.score ?? 0);
+				if (score <= bestScore) continue;
+				bestScore = score;
+				best = found;
 			}
-	if (best) return best;
+	if (best) {
+		const chosen = best;
+		const implied = (s: Solution) =>
+			!!(s.quantity?.implied || s.unitPrice?.implied || s.total?.implied);
+		chosen.rivals = chosen.balanced
+			? closing.filter(
+					(other) =>
+						other !== chosen &&
+						other.quantity?.token === chosen.quantity?.token &&
+						other.unitPrice?.token === chosen.unitPrice?.token &&
+						other.total?.token === chosen.total?.token &&
+						other.quantity?.value !== chosen.quantity?.value &&
+						// The same price: the quantity and the total scaled together,
+						// which is what one dropped separator in each of them does.
+						other.unitPrice?.value === chosen.unitPrice?.value &&
+						(implied(other) || implied(chosen)),
+				)
+			: [];
+		return chosen;
+	}
 	const quantity =
 		quantities.find((c) => !c.implied && !c.token.alternate) ?? null;
 	const unitPrice =
@@ -265,7 +346,7 @@ function solve(
 		(!unitPrice || !samePlace(printedTotal.token, unitPrice.token))
 			? printedTotal
 			: null;
-	return { quantity, unitPrice, total, balanced: false };
+	return { quantity, unitPrice, total, balanced: false, rivals: [] };
 }
 
 const FUEL_QUANTITY_UNITS = ["litre", "gallon", "kwh", "mass", "volume-gas"];
@@ -381,15 +462,44 @@ function currencyOf(
 /** The printed product name, from the line that names a fuel and nothing else. */
 function productOf(lines: readonly OcrLine[]): ScannedField<string> | null {
 	for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
-		const text = lines[lineIndex].text.trim();
-		if (!looksLikeProduct(text)) continue;
-		return {
-			value: text,
-			confidence: 0.85,
-			source: { lineIndex, box: lines[lineIndex].box },
-		};
+		const product = productAt(lineIndex, lines);
+		if (product) return product;
 	}
 	return null;
+}
+
+/** The product a line names, if it names one. */
+function productAt(
+	lineIndex: number,
+	lines: readonly OcrLine[],
+): ScannedField<string> | null {
+	const line = lines[lineIndex];
+	if (!line) return null;
+	const whole = line.text.trim();
+	// `Bomba 4  GASOLEO`: the pump number refuses the line, not the fuel.
+	const text = [
+		whole,
+		...whole.split(/\s{2,}/),
+		whole.replace(/^\p{L}+\.?\s*#?\s*\d+\s+/u, ""),
+	].find(looksLikeProduct);
+	return text
+		? { value: text, confidence: 0.85, source: { lineIndex, box: line.box } }
+		: null;
+}
+
+/**
+ * The product a fill's own lines name: its line, or the line above it. On a
+ * receipt with a diesel and an AdBlue, each fill is the product printed over
+ * it, not whichever product the paper prints first.
+ */
+function productNear(
+	token: NumberToken | undefined,
+	lines: readonly OcrLine[],
+): ScannedField<string> | null {
+	if (!token) return null;
+	return (
+		productAt(token.lineIndex, lines) ?? productAt(token.lineIndex - 1, lines)
+	);
 }
 
 /**
@@ -473,12 +583,16 @@ export function extractReceipt(
 	lines: readonly OcrLine[],
 	context: ScanContext = {},
 ): ReceiptReading {
-	lines = lines.slice(0, 500).map((line) => ({
-		...line,
-		text: normalizeReceiptText(line.text.slice(0, 1500)),
-	}));
+	const rows = joinRows(
+		lines.slice(0, 500).map((line) => ({
+			...line,
+			text: normalizeReceiptText(line.text.slice(0, 1500)),
+		})),
+	);
+	lines = rows.lines;
 	const now = context.now ?? new Date();
 	const all = tokenize(lines, context);
+	labelColumns(all, lines);
 	// A timestamp is six numbers and none of them is a measurement.
 	const tokens = all.filter((token) => !token.partOfDateTime);
 
@@ -488,44 +602,36 @@ export function extractReceipt(
 	// for whether a total can carry cents at all.
 	const fallbackCurrency =
 		context.currency ?? countryCurrency(context.country) ?? null;
-	const solution = solve(
-		candidatesFor("quantity", tokens, lines, fallbackCurrency),
-		candidatesFor("unitPrice", tokens, lines, fallbackCurrency),
-		candidatesFor("total", tokens, lines, fallbackCurrency),
-		fallbackCurrency,
-	);
+	const quantities = candidatesFor("quantity", tokens, lines, fallbackCurrency);
+	const prices = candidatesFor("unitPrice", tokens, lines, fallbackCurrency);
+	const totals = candidatesFor("total", tokens, lines, fallbackCurrency);
+	let solution = solve(quantities, prices, totals, fallbackCurrency);
+	// The sum closes on more than one reading of the same paper. Only the tank
+	// can say which is a fill; without it, none of them counts as checked.
+	if (solution.rivals.length > 0) {
+		const limit = tankLimit(
+			context.tankCapacityLitres,
+			receiptUnitOf(
+				solution.quantity?.token,
+				solution.unitPrice?.token,
+				context,
+			),
+		);
+		const fitting =
+			limit === null
+				? []
+				: [solution, ...solution.rivals].filter(
+						(s) => (s.quantity?.value ?? Number.POSITIVE_INFINITY) <= limit,
+					);
+		solution =
+			fitting.length === 1
+				? { ...fitting[0], rivals: [] }
+				: { ...solution, balanced: false };
+	}
 
 	const quantityToken = solution.quantity?.token;
 	const rateToken = solution.unitPrice?.token;
-	const unit =
-		quantityToken?.unit &&
-		["litre", "gallon", "kwh", "mass", "volume-gas"].includes(
-			quantityToken.unit,
-		)
-			? quantityToken.unit
-			: rateToken?.unit;
-	const unitText = [
-		quantityToken?.before,
-		quantityToken?.after,
-		rateToken?.before,
-		rateToken?.after,
-	].join(" ");
-	let quantityUnit: ReceiptUnit | null =
-		unit === "gallon" || unit === "per-gallon"
-			? /imperial|imp\.?\s*gal|uk\s*gal|gal\w*\s*\(?(?:uk|imp)/i.test(unitText)
-				? "gallon_uk"
-				: /us\s*gal|gal\w*\s*\(?us/i.test(unitText) || context.country === "US"
-					? "gallon_us"
-					: "gal"
-			: unit === "mass" || unit === "per-kg"
-				? "kg"
-				: unit === "volume-gas" || unit === "per-m3"
-					? "m3"
-					: unit === "kwh" || unit === "per-kwh"
-						? "kWh"
-						: unit === "litre" || unit === "per-litre"
-							? "L"
-							: null;
+	let quantityUnit = receiptUnitOf(quantityToken, rateToken, context);
 	if (!quantityUnit && solution.quantity)
 		quantityUnit = context.quantityUnit ?? null;
 	const matchingRate: Record<string, string> = {
@@ -549,10 +655,44 @@ export function extractReceipt(
 	// A sum that closes proves the arithmetic, not the purchase: a shop line
 	// (`2 x 5,00 10,00`) closes as well as the pump's. It counts as checked
 	// only when the paper also says the triple measures fuel or energy.
+	const discount = discountOf(
+		tokens,
+		lines,
+		solution.quantity?.value,
+		currencyOf(lines, context)?.value ?? fallbackCurrency,
+	);
+	const fees = feesOf(
+		tokens,
+		lines,
+		currencyOf(lines, context)?.value ?? fallbackCurrency,
+	);
+	// A total printed after a printed discount or fee: what the pump measured,
+	// less what came off and plus what was added, is what was paid. That total
+	// wins over the amount on the fuel line, which is the energy alone.
+	const paid = totals.find((c) => !c.implied && !c.token.alternate) ?? null;
+	if (
+		(discount || fees) &&
+		solution.quantity &&
+		solution.unitPrice &&
+		paid &&
+		(!solution.balanced || solution.total !== paid) &&
+		!samePlace(paid.token, solution.quantity.token) &&
+		!samePlace(paid.token, solution.unitPrice.token) &&
+		Math.abs(
+			afterDiscount(
+				solution.quantity.value * solution.unitPrice.value,
+				discount?.value,
+			) +
+				(fees?.value ?? 0) -
+				paid.value,
+		) <= tolerance(paid.value, paid.token.currency ?? fallbackCurrency ?? "EUR")
+	) {
+		solution.total = paid;
+		solution.balanced = true;
+	}
+	const fuelEvidence = measuresFuel(quantityToken, rateToken, lines);
 	const arithmeticChecked =
-		solution.balanced &&
-		!conflictingRate &&
-		measuresFuel(quantityToken, rateToken, lines);
+		solution.balanced && !conflictingRate && fuelEvidence;
 	const odometer = odometerOf(tokens, lines);
 	const odoText = odometer?.source ? lines[odometer.source.lineIndex].text : "";
 	const odometerUnit = /\b(mi|mls|miles|mileage|miglia)\b/i.test(odoText)
@@ -560,7 +700,16 @@ export function extractReceipt(
 		: /\b(km|kms|kilomet|quilomet|chilometr|kmstand|tachostand)/i.test(odoText)
 			? ("km" as const)
 			: null;
-	const product = productOf(lines);
+	const product = productNear(quantityToken, lines) ?? productOf(lines);
+	const kind: ReceiptKind =
+		fuelEvidence || product || energyMode === "charge"
+			? "fuel"
+			: solution.balanced
+				? "other"
+				: "unknown";
+	const otherFills = arithmeticChecked
+		? fillsBeside(solution, quantities, prices, totals, lines, context)
+		: [];
 	const date = readDate(
 		lines,
 		now,
@@ -568,7 +717,7 @@ export function extractReceipt(
 			(context.country ? regionDateOrder(context.country) : undefined),
 	);
 
-	return {
+	return withCallerLines(rows.origin, {
 		date,
 		time: readTime(lines, date?.source?.lineIndex),
 		total: fieldFrom(solution.total, arithmeticChecked),
@@ -587,5 +736,231 @@ export function extractReceipt(
 		quantityUnit,
 		energyMode,
 		arithmeticChecked,
+		kind,
+		discount,
+		fees,
+		otherFills,
+	});
+}
+
+/** The unit the quantity is in, from the quantity's own unit, else the rate's. */
+function receiptUnitOf(
+	quantityToken: NumberToken | undefined,
+	rateToken: NumberToken | undefined,
+	context: ScanContext,
+): ReceiptUnit | null {
+	const unit =
+		quantityToken?.unit && FUEL_QUANTITY_UNITS.includes(quantityToken.unit)
+			? quantityToken.unit
+			: rateToken?.unit;
+	const unitText = [
+		quantityToken?.before,
+		quantityToken?.after,
+		rateToken?.before,
+		rateToken?.after,
+	].join(" ");
+	return unit === "gallon" || unit === "per-gallon"
+		? /imperial|imp\.?\s*gal|uk\s*gal|gal\w*\s*\(?(?:uk|imp)/i.test(unitText)
+			? "gallon_uk"
+			: /us\s*gal|gal\w*\s*\(?us/i.test(unitText) || context.country === "US"
+				? "gallon_us"
+				: "gal"
+		: unit === "mass" || unit === "per-kg"
+			? "kg"
+			: unit === "volume-gas" || unit === "per-m3"
+				? "m3"
+				: unit === "kwh" || unit === "per-kwh"
+					? "kWh"
+					: unit === "litre" || unit === "per-litre"
+						? "L"
+						: null;
+}
+
+function afterDiscount(gross: number, discount?: ReceiptDiscount): number {
+	if (!discount) return gross;
+	return discount.type === "percent"
+		? gross * (1 - discount.value / 100)
+		: gross - discount.value;
+}
+
+/**
+ * The discount the paper prints, read from the last number on each line that
+ * names one: `Desconto -4,00`, `Desc. 5% -3,20`, `Desc. 0,10 EUR/L`.
+ *
+ * Several discount lines add up, unless one of them is their total. A rate
+ * per litre is an amount only once a quantity was read, and is otherwise
+ * left out: the engine does not guess the litres it would apply to.
+ */
+function discountOf(
+	tokens: readonly NumberToken[],
+	lines: readonly OcrLine[],
+	quantity: number | undefined,
+	currency: string | null,
+): ScannedField<ReceiptDiscount> | null {
+	const last = new Map<number, NumberToken>();
+	for (const token of tokens) {
+		if (token.alternate || !namesDiscount(lines[token.lineIndex].text))
+			continue;
+		const seen = last.get(token.lineIndex);
+		if (!seen || seen.span.from < token.span.from)
+			last.set(token.lineIndex, token);
+	}
+	const found: { discount: ReceiptDiscount; token: NumberToken }[] = [];
+	for (const token of last.values()) {
+		const value = Math.abs(token.readings[0]);
+		if (!(value > 0)) continue;
+		if (token.unit === "percent") {
+			if (value < 100)
+				found.push({ discount: { type: "percent", value }, token });
+		} else if (token.unit?.startsWith("per-") && token.unit !== "per-unit") {
+			if (quantity !== undefined)
+				found.push({
+					discount: {
+						type: "amount",
+						value: roundTo(value * quantity, currency),
+					},
+					token,
+				});
+		} else {
+			found.push({ discount: { type: "amount", value }, token });
+		}
+	}
+	if (found.length === 0) return null;
+	const summary = found.find(({ token }) =>
+		names("total", lines[token.lineIndex].text),
+	);
+	const amounts = found.filter(({ discount }) => discount.type === "amount");
+	const chosen = summary ? [summary] : amounts.length > 0 ? amounts : found;
+	if (chosen.length > 1 && chosen.some((c) => c.discount.type !== "amount"))
+		return null;
+	const value = roundTo(
+		chosen.reduce((sum, { discount }) => sum + discount.value, 0),
+		currency,
+	);
+	return {
+		value: { type: chosen[0].discount.type, value },
+		confidence: 0.8,
+		source: sourceOf(chosen[0].token),
 	};
+}
+
+/**
+ * Charges the paper adds to the energy itself, summed: an EV session fee, an
+ * idle fee. The last number on each line that names one.
+ */
+function feesOf(
+	tokens: readonly NumberToken[],
+	lines: readonly OcrLine[],
+	currency: string | null,
+): ScannedField<number> | null {
+	const last = new Map<number, NumberToken>();
+	for (const token of tokens) {
+		if (token.alternate || !namesFee(lines[token.lineIndex].text)) continue;
+		const seen = last.get(token.lineIndex);
+		if (!seen || seen.span.from < token.span.from)
+			last.set(token.lineIndex, token);
+	}
+	const found = [...last.values()].filter(
+		(token) => token.unit !== "percent" && token.readings[0] > 0,
+	);
+	if (found.length === 0) return null;
+	return {
+		value: roundTo(
+			found.reduce((sum, token) => sum + token.readings[0], 0),
+			currency,
+		),
+		confidence: 0.8,
+		source: sourceOf(found[0]),
+	};
+}
+
+/** The tank in the quantity's own unit, with a little room, or null. */
+function tankLimit(
+	litres: number | undefined,
+	unit: ReceiptUnit | null,
+): number | null {
+	if (!litres || !(litres > 0)) return null;
+	const room = 1.1;
+	if (unit === "L") return litres * room;
+	if (unit === "gallon_uk") return (litres / 4.54609) * room;
+	if (unit === "gallon_us" || unit === "gal")
+		return (litres / 3.785411784) * room;
+	return null;
+}
+
+function roundTo(value: number, currency: string | null): number {
+	const factor = 10 ** currencyDecimals(currency ?? "EUR");
+	return Math.round(value * factor) / factor;
+}
+
+/**
+ * Other fills that close on a line of their own: quantity and price on one
+ * line, with the amount on the same line, and a fuel the paper names. Never
+ * the solved fill's own numbers.
+ */
+function fillsBeside(
+	solution: Solution,
+	quantities: readonly Candidate[],
+	prices: readonly Candidate[],
+	totals: readonly Candidate[],
+	lines: readonly OcrLine[],
+	context: ScanContext,
+): ReceiptFill[] {
+	const used = [solution.quantity, solution.unitPrice, solution.total]
+		.filter((c): c is Candidate => c !== null)
+		.map((c) => c.token);
+	const fresh = (c: Candidate) =>
+		!c.implied &&
+		!c.token.alternate &&
+		!used.some((token) => token.lineIndex === c.token.lineIndex);
+	const fills: { fill: ReceiptFill; line: number; score: number }[] = [];
+	for (const q of quantities.filter(fresh))
+		for (const p of prices.filter(fresh)) {
+			if (q.token.lineIndex !== p.token.lineIndex) continue;
+			if (samePlace(q.token, p.token)) continue;
+			if (fills.some((f) => f.line === q.token.lineIndex)) continue;
+			const t = totals.find(
+				(c) =>
+					fresh(c) &&
+					c.token.lineIndex === q.token.lineIndex &&
+					!samePlace(c.token, q.token) &&
+					!samePlace(c.token, p.token) &&
+					balances(q, p, c, null),
+			);
+			if (!t || !measuresFuel(q.token, p.token, lines)) continue;
+			const named = productNear(q.token, lines);
+			fills.push({
+				line: q.token.lineIndex,
+				score: q.score + p.score,
+				fill: {
+					quantity: fieldFrom(q, true) as ScannedField<number>,
+					unitPrice: fieldFrom(p, true) as ScannedField<number>,
+					total: fieldFrom(t, true) as ScannedField<number>,
+					fuelLabel: named,
+					fuelTypeId: named ? fuelTypeIdFor(named.value) : null,
+					quantityUnit: receiptUnitOf(q.token, p.token, context),
+				},
+			});
+		}
+	return fills
+		.sort((a, b) => b.score - a.score)
+		.slice(0, 3)
+		.map(({ fill }) => fill);
+}
+
+/** Every `source.lineIndex` pointed back at the caller's lines, not the joined rows. */
+function withCallerLines(
+	origin: (lineIndex: number, box: FieldSource["box"]) => number,
+	reading: ReceiptReading,
+): ReceiptReading {
+	const out: Record<string, unknown> = { ...reading };
+	for (const [key, field] of Object.entries(reading)) {
+		const source = (field as ScannedField<unknown> | null)?.source;
+		if (!source) continue;
+		out[key] = {
+			...field,
+			source: { ...source, lineIndex: origin(source.lineIndex, source.box) },
+		};
+	}
+	return out as unknown as ReceiptReading;
 }

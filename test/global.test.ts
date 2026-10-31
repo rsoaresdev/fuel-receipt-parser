@@ -14,7 +14,7 @@ function read(rows: string[], context: ScanContext = {}) {
 }
 
 describe("receipt evidence", () => {
-	it("keeps a paid total as reference even when a subtotal balances", () => {
+	it("keeps the paid total, and checks it through the printed discount", () => {
 		const r = read([
 			"Shell",
 			"40 L x 1.80 EUR/L",
@@ -25,7 +25,9 @@ describe("receipt evidence", () => {
 		expect(r.quantity?.value).toBe(40);
 		expect(r.unitPrice?.value).toBe(1.8);
 		expect(r.total?.value).toBe(68);
-		expect(r.arithmeticChecked).toBe(false);
+		expect(r.discount?.value).toEqual({ type: "amount", value: 4 });
+		// 72 less the 4 the paper prints is the 68 it says was paid.
+		expect(r.arithmeticChecked).toBe(true);
 		// The pump price stays what was printed: 40 x 1.80 is 72 before the discount.
 		expect((r.quantity?.value ?? 0) * (r.unitPrice?.value ?? 0)).toBe(72);
 	});
