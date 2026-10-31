@@ -75,7 +75,7 @@
 		"@vitest/coverage-v8": "^5.0.5",
 		"publint": "^0.3.25",
 		"tsdown": "^0.23.4",
-		"typescript": "^6.0.3",
+		"typescript": "^7.0.2",
 		"vitest": "^5.0.5"
 	},
 	"module": "./dist/index.js"
