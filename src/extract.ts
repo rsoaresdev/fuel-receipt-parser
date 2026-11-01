@@ -70,6 +70,18 @@ const LABEL_REACH = 64;
  * The label nearest a number: what precedes it, else the column heading above
  * it, else the start of its line.
  */
+/**
+ * The amount for the fuel alone, on a receipt that also sells a car wash or a
+ * snack: `FUEL 77.99`, `UNLEADED 77.99` above `TOTAL 85.99`.
+ */
+function namesFuelAmount(label: string): boolean {
+	return (
+		/(?<![a-z])(?:fuel|gas|combust[ií]vel|combustible|carburant|kraftstoff|carburante)\s*[:.]?\s*$/i.test(
+			label.trim(),
+		) || looksLikeProduct(label)
+	);
+}
+
 function contextFor(token: NumberToken, lines: readonly OcrLine[]): string {
 	const before = token.before.trim();
 	if (token.heading && !/\p{L}/u.test(before)) return token.heading;
@@ -151,6 +163,7 @@ function priorFor(
 			/[x×*@]\s*\p{Sc}?\s*\d[\d.,]*\s*(?:[^\d\s]+\s*\/\s*\S+)?\s*$/u.test(label)
 		)
 			score += 0.4;
+		if (namesFuelAmount(label)) score += 0.4;
 		if (/subtotal|sub total|netto|neto|liquido|base/i.test(label)) score -= 0.6;
 	}
 	if (score < 0.35) return -Infinity;
@@ -234,6 +247,7 @@ function balances(
 }
 
 function solve(
+	lines: readonly OcrLine[],
 	quantities: readonly Candidate[],
 	prices: readonly Candidate[],
 	totals: readonly Candidate[],
@@ -254,8 +268,9 @@ function solve(
 		for (const p of prices) {
 			if (samePlace(q.token, p.token)) continue;
 			// A receipt with a shop item too totals more than the fuel. The
-			// amount printed on the fuel line itself is the pump's own sum, so
-			// it may close the triple when the receipt's total does not.
+			// amount printed on the fuel line itself, or labelled as the fuel's,
+			// is the pump's own sum, so it may close the triple when the
+			// receipt's total does not.
 			const t = closes(q, p, printedTotal)
 				? printedTotal
 				: (totals.find(
@@ -263,7 +278,8 @@ function solve(
 							!c.implied &&
 							!c.token.alternate &&
 							(c.token.lineIndex === q.token.lineIndex ||
-								c.token.lineIndex === p.token.lineIndex) &&
+								c.token.lineIndex === p.token.lineIndex ||
+								namesFuelAmount(contextFor(c.token, lines))) &&
 							closes(q, p, c),
 					) ?? printedTotal);
 			const balanced = closes(q, p, t);
@@ -605,7 +621,7 @@ export function extractReceipt(
 	const quantities = candidatesFor("quantity", tokens, lines, fallbackCurrency);
 	const prices = candidatesFor("unitPrice", tokens, lines, fallbackCurrency);
 	const totals = candidatesFor("total", tokens, lines, fallbackCurrency);
-	let solution = solve(quantities, prices, totals, fallbackCurrency);
+	let solution = solve(lines, quantities, prices, totals, fallbackCurrency);
 	// The sum closes on more than one reading of the same paper. Only the tank
 	// can say which is a fill; without it, none of them counts as checked.
 	if (solution.rivals.length > 0) {
