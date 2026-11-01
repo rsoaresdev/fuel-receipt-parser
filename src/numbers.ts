@@ -146,6 +146,8 @@ const UNIT_AFTER = new RegExp(
 	`^[\\s]*(?:(${LITRE})|(${GALLON}|g(?=\\s*[@x×*]))|(${KWH})|(${CURRENCY_PATTERN})|(%)|(km|kms|mi|mls|miles)|(${MASS})|(${GAS_VOLUME}))(?![a-zA-Z])`,
 	"i",
 );
+/** A currency symbol after a space and touching the digits that follow it. */
+const LEADS_NEXT_NUMBER = /^\s+\p{Sc}\d/u;
 const CURRENCY_BEFORE = new RegExp(`(?:${CURRENCY_PATTERN})\\s*$`, "i");
 /** `Litros 15,24` - the column layout, where the unit heads its value. */
 const UNIT_BEFORE = new RegExp(
@@ -363,7 +365,12 @@ export function unitFor(before: string, after: string): TokenUnit | null {
 	const rateAfter = RATE_AFTER.exec(after);
 	if (rateAfter) return rateKind(rateAfter[1] ?? "");
 
-	const plainAfter = UNIT_AFTER.exec(after);
+	// `11.000 G @ 4.299 $47.29`: a currency mark set against the NEXT number
+	// is that number's, not a suffix of this one. Read as this one's, the
+	// price per gallon would come back as money and the line would not close.
+	const plainAfter = LEADS_NEXT_NUMBER.test(after)
+		? null
+		: UNIT_AFTER.exec(after);
 	if (plainAfter) {
 		if (plainAfter[1]) return "litre";
 		if (plainAfter[2]) return "gallon";
