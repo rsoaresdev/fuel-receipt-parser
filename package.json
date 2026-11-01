@@ -1,6 +1,6 @@
 {
 	"name": "fuel-receipt-parser",
-	"version": "1.1.0",
+	"version": "1.1.1",
 	"description": "Read fuel and EV charging receipts from OCR text: litres, price per litre, total, date, currency, fuel type and station. Arithmetic-checked (litres x price = total), never invents a number. Works with any OCR (Apple Vision, ML Kit, Tesseract, Google Vision). Zero dependencies.",
 	"keywords": [
 		"receipt",
