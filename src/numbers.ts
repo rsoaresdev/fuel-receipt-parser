@@ -127,12 +127,20 @@ const SUBUNIT_RATE = new RegExp(
 	`^\\s*(?:p|c|ct|cts|¢)(?:\\s*\\/\\s*(${LITRE}|${GALLON})|(pl))?(?![a-z0-9])`,
 	"i",
 );
+/** The same mark heading its value: `PPL 155.9`, `P/LTR 155.9`. */
+const SUBUNIT_BEFORE = new RegExp(
+	`(?<![a-z])(?:ppl|[pc]\\s*\\/\\s*(${LITRE}))\\s*[:.]?\\s*$`,
+	"i",
+);
 const PRICE_POSITION = new RegExp(
 	`(?:[@x×*]|(?<![a-z])(?:${PRICE_WORD})[^\\d]{0,12})\\s*$`,
 	"i",
 );
-/** `x 1,899` on a fuel line: a rate by position, with no unit printed at all. */
-const TIMES_BEFORE = /(?:^|[\s\d])[x*×@]\s*$/i;
+/** `x 1,899` or `@ $3.299` on a fuel line: a rate by position, with no unit printed at all. */
+const TIMES_BEFORE = new RegExp(
+	`(?:^|[\\s\\d])[x*×@]\\s*(?:${CURRENCY_PATTERN})?\\s*$`,
+	"i",
+);
 
 const UNIT_AFTER = new RegExp(
 	`^[\\s]*(?:(${LITRE})|(${GALLON}|g(?=\\s*[@x×*]))|(${KWH})|(${CURRENCY_PATTERN})|(%)|(km|kms|mi|mls|miles)|(${MASS})|(${GAS_VOLUME}))(?![a-zA-Z])`,
@@ -423,22 +431,33 @@ function tokensIn(
 			const after = text.slice(to);
 			const subunit = SUBUNIT_RATE.exec(after);
 			const hundredths =
-				subunit && (subunit[1] || subunit[2] || PRICE_POSITION.test(before))
+				(subunit && (subunit[1] || subunit[2] || PRICE_POSITION.test(before))
 					? subunit
-					: null;
+					: null) ?? SUBUNIT_BEFORE.exec(before);
+			const unit = hundredths
+				? rateKind(hundredths[1] ?? "l")
+				: unitFor(before, after);
+			// `40.00L @ 169.9` prints pence or cents with no mark at all. The
+			// price in whole currency is offered as an implied reading, so it is
+			// believed only when it closes the sum.
+			const unmarkedHundredths =
+				!hundredths &&
+				unit === "per-unit" &&
+				/^\d{2,3}[.,]\d$/.test(repairedText) &&
+				values.length === 1;
 			tokens.push({
 				readings: hundredths
 					? values.map((value) => Math.round(value * 1e4) / 1e6)
-					: values,
-				implied,
+					: unmarkedHundredths
+						? [values[0], Math.round(values[0] * 1e4) / 1e6]
+						: values,
+				implied: unmarkedHundredths ? 1 : implied,
 				lineIndex,
 				box: boxForRange(line, from, to),
 				before: before.toLowerCase(),
 				after: after.toLowerCase(),
 				currency: lineCurrency,
-				unit: hundredths
-					? rateKind(hundredths[1] ?? "l")
-					: unitFor(before, after),
+				unit,
 				repaired,
 				partOfDateTime: overlapsAny(stamps, from, to),
 				glued: /[a-zà-ÿ]$/i.test(before) || /^[a-zà-ÿ]/i.test(after),

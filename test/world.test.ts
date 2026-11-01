@@ -84,9 +84,91 @@ describe("prices written in hundredths", () => {
 		);
 		expect(r.unitPrice?.value).toBe(1.499);
 	});
+
+	it("reads pence or cents printed with no mark after @", () => {
+		for (const [country, mark] of [
+			["AU", "$"],
+			["CA", "$"],
+			["GB", "£"],
+		]) {
+			const r = read(["Ampol", "E10", "40.00L @ 169.9", `TOTAL ${mark}67.96`], {
+				country,
+			});
+			expect(summary(r)).toEqual({
+				quantity: 40,
+				unitPrice: 1.699,
+				total: 67.96,
+				checked: true,
+			});
+		}
+	});
+
+	it("keeps an unmarked price as printed when hundredths do not close", () => {
+		const r = read(["40.00L @ 169.9", "TOTAL £50.00"], { country: "GB" });
+		expect(r.unitPrice?.value).toBe(169.9);
+		expect(r.arithmeticChecked).toBe(false);
+	});
+
+	it("reads LTR and P/LTR on one line", () => {
+		const r = read(
+			["BP", "UNLEADED", "30.00 LTR 155.9 P/LTR", "TOTAL £46.77"],
+			{
+				country: "GB",
+			},
+		);
+		expect(summary(r)).toEqual({
+			quantity: 30,
+			unitPrice: 1.559,
+			total: 46.77,
+			checked: true,
+		});
+		expect(r.date).toBeNull();
+	});
+
+	it("reads a PPL heading before the price", () => {
+		const r = read(
+			["BP", "UNLEADED", "LITRES 30.00", "PPL 155.9", "TOTAL £46.77"],
+			{
+				country: "GB",
+			},
+		);
+		expect(summary(r)).toEqual({
+			quantity: 30,
+			unitPrice: 1.559,
+			total: 46.77,
+			checked: true,
+		});
+	});
 });
 
 describe("a US pump", () => {
+	it("reads a $ between @ and the price", () => {
+		const r = read(["Shell", "UNLEADED", "11.482 G @ $3.299", "TOTAL $37.88"], {
+			country: "US",
+		});
+		expect(summary(r)).toEqual({
+			quantity: 11.482,
+			unitPrice: 3.299,
+			total: 37.88,
+			checked: true,
+		});
+	});
+
+	it("checks the fuel amount when the total includes a car wash or a snack", () => {
+		for (const extra of ["CAR WASH 8.00", "SNACKS 8.00"]) {
+			const r = read(
+				["Shell", "23.640 G @ 3.299", "FUEL 77.99", extra, "TOTAL $85.99"],
+				{ country: "US" },
+			);
+			expect(summary(r)).toEqual({
+				quantity: 23.64,
+				unitPrice: 3.299,
+				total: 77.99,
+				checked: true,
+			});
+		}
+	});
+
 	it("joins the tenth of a cent printed small", () => {
 		for (const price of ["PRICE/GAL $3.45 9", "PRICE/GAL $3.45⁹"]) {
 			const r = read(["Shell", "GALLONS 12.345", price, "FUEL TOTAL $42.70"], {

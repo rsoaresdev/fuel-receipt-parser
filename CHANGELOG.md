@@ -2,6 +2,16 @@
 
 All notable changes to this package are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- `11.482 G @ $3.299`, with a currency mark between the `@` and the price, is read as the price per gallon.
+- A price in pence or cents printed with no mark after `@` (`40.00L @ 169.9`, in Australia, Canada and the UK) is read as 1.699 when that closes the sum, and kept as printed when it does not.
+- `30.00 LTR 155.9 P/LTR` keeps its quantity. The `00 LTR 155` in it was being read as a date.
+- `PPL 155.9` and `P/LTR 155.9`, with the pence mark heading the price, are read as the price per litre.
+- On a receipt whose total includes a car wash or a snack, the amount labelled as the fuel's (`FUEL 77.99`, or a fuel name) checks the fuel when the total does not.
+
 ## [1.1.0] - 2026-10-31
 
 ### Added
