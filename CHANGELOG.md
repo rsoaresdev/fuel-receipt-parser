@@ -2,6 +2,14 @@
 
 All notable changes to this package are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.1.2] - 2026-11-01
+
+### Fixed
+
+- `11.000 G @ 4.299 $47.29`, a US pump line with the amount after the price, is read and checked. The `$` was taken as a suffix of the price per gallon, so the line did not close.
+- An ISO 8601 stamp with a `T` between the date and the time (`2026-10-31T14:12:09`) gives its date and its time. Before, the date was missed and the time read as `12:09`.
+
+
 ## [1.1.1] - 2026-11-01
 
 ### Fixed

@@ -197,6 +197,19 @@ describe("a US pump", () => {
 		expect(r.fuelTypeId).toBeNull();
 		expect(r.fuelLabel?.value).toBe("PREMIUM 93");
 	});
+
+	it("reads the amount printed on the @ line after its $", () => {
+		const r = read(["Chevron", "UNLEADED", "11.000 G @ 4.299 $47.29"], {
+			country: "US",
+		});
+		expect(summary(r)).toEqual({
+			quantity: 11,
+			unitPrice: 4.299,
+			total: 47.29,
+			checked: true,
+		});
+		expect(r.currency?.value).toBe("USD");
+	});
 });
 
 describe("labels beyond the six base languages", () => {
@@ -314,6 +327,18 @@ describe("calendars", () => {
 			read(["ENEOS", "26/10/31 10:12"], { country: "JP" }).date?.value,
 		).toBe("2026-10-31");
 		expect(regionDateOrder("KR")).toBe("ymd");
+	});
+
+	it("reads an ISO 8601 stamp with a T between the date and the time", () => {
+		for (const stamp of [
+			"2026-10-31T14:12:09",
+			"2026-10-31T14:12",
+			"2026-10-31T14:12:09Z",
+		]) {
+			const r = read(["BP", stamp], { country: "PT" });
+			expect(r.date?.value).toBe("2026-10-31");
+			expect(r.time?.value).toBe("14:12");
+		}
 	});
 });
 
