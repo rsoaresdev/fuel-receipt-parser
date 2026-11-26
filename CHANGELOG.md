@@ -11,6 +11,11 @@ All notable changes to this package are listed here. The format follows [Keep a 
 - `country: "BG"` prices in euros, as Bulgaria has since 1 January 2026. A receipt printed in leva (`лв.`) is still read as BGN.
 - `currency` passed by the caller now settles an ambiguous symbol such as `$` ahead of the currency implied by `country`.
 - A second fill on the same receipt is checked to the receipt's own currency precision, not always to the euro cent.
+- A recogniser's `alternates` are bounded like the lines themselves: the first three per line, each cut to 1500 characters. A line with dozens of very long alternates could run the parser out of memory.
+
+### Changed
+
+- About 20 times faster on a typical receipt: the solver asked whether each total names the fuel once per pair of candidates, not once per total.
 
 ### Removed
 
