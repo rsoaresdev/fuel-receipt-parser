@@ -469,6 +469,19 @@ describe("the odometer, which is nearly always handwritten", () => {
 		expect(receipt.odometer?.value).toBe(148230);
 	});
 
+	it("does not take a loyalty scheme's miles for a reading", () => {
+		const receipt = read([
+			"GALP",
+			"GASOLEO 40,00 L x 1,500 EUR/L 60,00",
+			"TOTAL 60,00 EUR",
+			"01/09/2026",
+			"OBRIGADO",
+			"Miles & More 123456",
+		]);
+		expect(receipt.arithmeticChecked).toBe(true);
+		expect(receipt.odometer).toBeNull();
+	});
+
 	it("leaves it empty rather than guess", () => {
 		// An odometer that goes backwards corrupts every consumption figure
 		// after it, so an unlabelled number is never one.

@@ -562,6 +562,10 @@ function placeOf(
 const ODOMETER_WORD =
 	/odomet|odómet|kilomet|quilomet|quilómet|chilomet|conta-quil|mileage|kmstand|tachostand/i;
 
+/** A loyalty scheme whose name says miles or points: `Miles & More 123456`. */
+const LOYALTY =
+	/miles\s*(?:&|and|\+|e|und|et|y)\s*more|avios|payback|pontos|points|punkte|puntos/i;
+
 /** A line that names a road: the words, or a designation like `A-4` or `N-IV`. */
 const ROAD_MARKER =
 	/\b(?:autovia|autovía|autopista|autostrada|autoestrada|autobahn|carretera|ctra|estrada|rodovia|strada|route|highway|hwy|salida|saída|uscita|ausfahrt|sortie|exit|pk)\b|\b(?:A|AP|N|E|M|IC|IP|EN|SS|RN|BR|CR|D|B)-(?:\d{1,3}|[IVX]{1,5})\b/i;
@@ -583,7 +587,7 @@ function odometerOf(
 	const header = Math.ceil(lines.length / 3);
 	for (const token of tokens) {
 		const label = contextFor(token, lines);
-		if (!names("odometer", label)) {
+		if (!names("odometer", label) || LOYALTY.test(label)) {
 			continue;
 		}
 		// `KM 245` in a station's address is a road marker, not a reading: a
