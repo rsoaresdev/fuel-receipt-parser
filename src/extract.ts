@@ -671,17 +671,15 @@ export function extractReceipt(
 	// A sum that closes proves the arithmetic, not the purchase: a shop line
 	// (`2 x 5,00 10,00`) closes as well as the pump's. It counts as checked
 	// only when the paper also says the triple measures fuel or energy.
+	const currency = currencyOf(lines, context);
+	const moneyCurrency = currency?.value ?? fallbackCurrency;
 	const discount = discountOf(
 		tokens,
 		lines,
 		solution.quantity?.value,
-		currencyOf(lines, context)?.value ?? fallbackCurrency,
+		moneyCurrency,
 	);
-	const fees = feesOf(
-		tokens,
-		lines,
-		currencyOf(lines, context)?.value ?? fallbackCurrency,
-	);
+	const fees = feesOf(tokens, lines, moneyCurrency);
 	// A total printed after a printed discount or fee: what the pump measured,
 	// less what came off and plus what was added, is what was paid. That total
 	// wins over the amount on the fuel line, which is the energy alone.
@@ -749,7 +747,7 @@ export function extractReceipt(
 		unitPrice: conflictingRate
 			? null
 			: fieldFrom(solution.unitPrice, arithmeticChecked),
-		currency: currencyOf(lines, context),
+		currency,
 		fuelLabel: product,
 		fuelTypeId:
 			(product ? fuelTypeIdFor(product.value) : null) ??
