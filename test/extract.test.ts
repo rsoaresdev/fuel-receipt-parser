@@ -20,6 +20,7 @@
 import { describe, expect, it } from "vitest";
 
 import { extractReceipt } from "../src/extract.js";
+import { fuelTypeIdFor } from "../src/labels.js";
 import { readings, tokenize } from "../src/numbers.js";
 import type { OcrLine } from "../src/types.js";
 
@@ -469,6 +470,24 @@ describe("a product printed on the line it measures", () => {
 		const receipt = read(["GALP", line, "TOTAL 64,00", "01/09/2026"]);
 		expect(receipt.fuelLabel?.value).toBe(label);
 		expect(receipt.fuelTypeId).toBe(fuel);
+	});
+});
+
+describe("Portuguese premium diesels and stations", () => {
+	it.each(["Gasoleo Evologic", "Óptima Diesel", "Gasóleo Aditivado"])(
+		"reads %s as an additised diesel",
+		(name) => {
+			expect(fuelTypeIdFor(name)).toBe("diesel_aditivado");
+		},
+	);
+	it("keeps a plain diesel plain", () => {
+		expect(fuelTypeIdFor("Gasoleo Simples")).toBe("diesel_simple");
+		expect(fuelTypeIdFor("Diesel Star")).toBe("diesel_simple");
+	});
+	it.each(["ALVES BANDEIRA"])("names the station %s", (brand) => {
+		expect(
+			read([brand, "Lisboa", "TOTAL 64,00", "01/09/2026"]).place,
+		).not.toBeNull();
 	});
 });
 

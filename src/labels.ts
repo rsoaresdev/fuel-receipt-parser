@@ -639,7 +639,7 @@ export function namesDiscount(text: string): boolean {
 const FUEL_RULES: readonly (readonly [FuelTypeId, RegExp])[] = [
 	[
 		"diesel_aditivado",
-		/\b(?:diesel|gasoleo|gazole|gasoil|gasolio|dieselkraftstoff)\b[^\n]{0,20}\b(?:aditivado|adit|premium|plus|top|evolution|excellium|ultimate|momentum|v-?power|extra|energy|efficient)\b|\b(?:aditivado|premium|excellium|ultimate|v-?power|momentum|evolution)\b[^\n]{0,20}\b(?:diesel|gasoleo|gazole|gasoil|gasolio)\b/i,
+		/\b(?:diesel|gasoleo|gazole|gasoil|gasolio|dieselkraftstoff)\b[^\n]{0,20}\b(?:aditivado|adit|premium|plus|top|evolution|excellium|ultimate|momentum|v-?power|extra|energy|efficient|evologic|optima)\b|\b(?:aditivado|premium|excellium|ultimate|v-?power|momentum|evolution|evologic|optima)\b[^\n]{0,20}\b(?:diesel|gasoleo|gazole|gasoil|gasolio)\b/i,
 	],
 	[
 		"diesel_simple",
@@ -754,6 +754,7 @@ export const KNOWN_BRANDS: readonly string[] = [
 	"Cepsa",
 	"Shell",
 	"Petrogal",
+	"Alves Bandeira",
 	"Intermarché",
 	"Continente",
 	"Auchan",
