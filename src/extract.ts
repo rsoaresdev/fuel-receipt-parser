@@ -259,6 +259,10 @@ function solve(
 	let best: Solution | null = null;
 	let bestScore = -Infinity;
 	const closing: Solution[] = [];
+	// Asked once per total here, not once per pair in the loop below.
+	const fuelAmounts = new Set(
+		totals.filter((c) => namesFuelAmount(contextFor(c.token, lines))),
+	);
 	const closes = (q: Candidate, p: Candidate, t: Candidate | null) =>
 		!!t &&
 		!samePlace(t.token, q.token) &&
@@ -279,7 +283,7 @@ function solve(
 							!c.token.alternate &&
 							(c.token.lineIndex === q.token.lineIndex ||
 								c.token.lineIndex === p.token.lineIndex ||
-								namesFuelAmount(contextFor(c.token, lines))) &&
+								fuelAmounts.has(c)) &&
 							closes(q, p, c),
 					) ?? printedTotal);
 			const balanced = closes(q, p, t);
