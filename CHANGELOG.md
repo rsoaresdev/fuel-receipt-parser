@@ -2,6 +2,20 @@
 
 All notable changes to this package are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- The sources of each fill in `otherFills` point at the caller's own lines. When the recogniser split a row in pieces they pointed at the joined rows instead, so a review screen drew the second fill's highlights on the wrong line.
+- A line that mentions `Portugal`, `Galp` or `Legal` is no longer read as a US gallon line, which had turned `12.50 9` into `12.509`.
+- `country: "BG"` prices in euros, as Bulgaria has since 1 January 2026. A receipt printed in leva (`лв.`) is still read as BGN.
+- `currency` passed by the caller now settles an ambiguous symbol such as `$` ahead of the currency implied by `country`.
+- A second fill on the same receipt is checked to the receipt's own currency precision, not always to the euro cent.
+
+### Removed
+
+- `src/units.ts` and the `decimalInput`, `localNumber` and `localReceiptNumber` helpers in `src/format.ts`. None was exported from the package or used by it.
+
 ## [1.1.2] - 2026-11-01
 
 ### Fixed
