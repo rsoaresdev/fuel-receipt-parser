@@ -508,6 +508,8 @@ function productAt(
 	const whole = line.text.trim();
 	// `Bomba 4  GASOLEO`: the pump number refuses the line, not the fuel.
 	const text = [
+		// `GASOLEO 40,00 L x 1,600 EUR/L 64,00`: the name before the numbers.
+		whole.replace(/\s+\d+[.,]\d.*$/u, ""),
 		whole,
 		...whole.split(/\s{2,}/),
 		whole.replace(/^\p{L}+\.?\s*#?\s*\d+\s+/u, ""),

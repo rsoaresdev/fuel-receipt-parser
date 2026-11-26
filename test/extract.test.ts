@@ -456,6 +456,22 @@ describe("what it does with nothing", () => {
 	});
 });
 
+describe("a product printed on the line it measures", () => {
+	it.each([
+		["GASOLEO 40,00 L x 1,600 EUR/L 64,00", "GASOLEO", "diesel_simple"],
+		["SP95 31,93 L x 1,899 EUR/L 60,64", "SP95", "gasoline_95"],
+		[
+			"Gasolina 95 Simples 31,93L 1,899 60,64",
+			"Gasolina 95 Simples",
+			"gasoline_95",
+		],
+	])("names the fuel in %s", (line, label, fuel) => {
+		const receipt = read(["GALP", line, "TOTAL 64,00", "01/09/2026"]);
+		expect(receipt.fuelLabel?.value).toBe(label);
+		expect(receipt.fuelTypeId).toBe(fuel);
+	});
+});
+
 describe("the odometer, which is nearly always handwritten", () => {
 	it("takes a printed reading when the receipt labels one", () => {
 		const receipt = read([
