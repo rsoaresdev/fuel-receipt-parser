@@ -19,6 +19,30 @@ import {
 const NOW = new Date(2026, 9, 31);
 
 describe("rows split by the recogniser", () => {
+	it("points every fill's sources at the caller's own lines", () => {
+		const at = (text: string, y: number, x = 0.05, width = 0.5): OcrLine => ({
+			text,
+			box: { x, y, width, height: 0.02 },
+		});
+		const lines = [
+			at("GASOLEO", 0.1),
+			at("31,93 L x 1,899 EUR/L", 0.14),
+			at("60,64", 0.14, 0.7, 0.2),
+			at("ADBLUE", 0.2),
+			at("10,00 L x 1,000 EUR/L", 0.24),
+			at("10,00", 0.24, 0.7, 0.2),
+			at("TOTAL 70,64 EUR", 0.3),
+		];
+		const receipt = extractReceipt(lines, { now: NOW });
+		const fill = receipt.otherFills?.[0];
+		expect(fill?.quantity.value).toBe(10);
+		expect(lines[fill?.quantity.source?.lineIndex ?? -1].text).toBe(
+			"10,00 L x 1,000 EUR/L",
+		);
+		expect(lines[fill?.total.source?.lineIndex ?? -1].text).toBe("10,00");
+		expect(lines[fill?.fuelLabel?.source?.lineIndex ?? -1].text).toBe("ADBLUE");
+	});
+
 	it("reads a table whose headings sit above the values", () => {
 		const receipt = extractReceipt(galpColumns, { now: NOW });
 		expect(receipt.quantity?.value).toBe(38.52);

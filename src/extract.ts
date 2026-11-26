@@ -969,14 +969,21 @@ function withCallerLines(
 	origin: (lineIndex: number, box: FieldSource["box"]) => number,
 	reading: ReceiptReading,
 ): ReceiptReading {
-	const out: Record<string, unknown> = { ...reading };
-	for (const [key, field] of Object.entries(reading)) {
-		const source = (field as ScannedField<unknown> | null)?.source;
-		if (!source) continue;
-		out[key] = {
-			...field,
-			source: { ...source, lineIndex: origin(source.lineIndex, source.box) },
-		};
-	}
-	return out as unknown as ReceiptReading;
+	const remap = <T extends object>(record: T): T => {
+		const out: Record<string, unknown> = { ...(record as object) };
+		for (const [key, field] of Object.entries(record)) {
+			const source = (field as ScannedField<unknown> | null)?.source;
+			if (!source) continue;
+			out[key] = {
+				...field,
+				source: { ...source, lineIndex: origin(source.lineIndex, source.box) },
+			};
+		}
+		return out as unknown as T;
+	};
+	return {
+		...remap(reading),
+		// Each fill carries boxes of its own, read off the same joined rows.
+		otherFills: reading.otherFills?.map(remap),
+	};
 }
