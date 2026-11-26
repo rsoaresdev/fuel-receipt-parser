@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CURRENCIES } from "../src/currencies.js";
 import { extractReceipt } from "../src/extract.js";
+import { normalizeReceiptText } from "../src/format.js";
 import { receiptCurrency, receiptRecognitionLanguage } from "../src/region.js";
 import type { OcrLine, ScanContext } from "../src/types.js";
 import { receiptUnitMetadata, storedReceiptUnit } from "../src/units.js";
@@ -235,6 +236,15 @@ describe("reference edge cases", () => {
 	it("retains a printed zero as a reference for a full discount", () => {
 		expect(read(["20 L", "Price 1.8 EUR/L", "Total 0 EUR"]).total?.value).toBe(
 			0,
+		);
+	});
+	it("does not take Portugal or Galp for a gallon line", () => {
+		expect(normalizeReceiptText("PORTUGAL 12.50 9 ITENS")).toBe(
+			"PORTUGAL 12.50 9 ITENS",
+		);
+		expect(normalizeReceiptText("GALP 3.45 9")).toBe("GALP 3.45 9");
+		expect(normalizeReceiptText("11.482GAL @ 3.45 9")).toBe(
+			"11.482GAL @ 3.459 ",
 		);
 	});
 });

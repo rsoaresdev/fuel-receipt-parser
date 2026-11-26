@@ -18,7 +18,10 @@ export function normalizeReceiptText(text: string): string {
 		.replace(/，/g, ",")
 		.replace(/[\u202f\u2009]/g, "\u00a0")
 		.replace(/(\d[.,]\d{2})\u2079/g, "$19")
-		.replace(/^.*(?:gal|ppg|@).*$/i, tenthOfACent);
+		.replace(
+			/^.*(?:(?<![a-z])(?:gal(?:s|lons?)?|ppg)(?![a-z])|@).*$/i,
+			tenthOfACent,
+		);
 }
 
 /**
