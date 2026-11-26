@@ -255,4 +255,9 @@ describe("reference edge cases", () => {
 		expect(countryCurrency("BG")).toBe("EUR");
 		expect(receiptCurrency("ОБЩО 60,00 лв.", { country: "BG" })).toBe("BGN");
 	});
+	it("lets the caller's currency settle an ambiguous symbol over the country's", () => {
+		expect(
+			receiptCurrency("Total $36", { country: "US", currency: "CAD" }),
+		).toBe("CAD");
+	});
 });

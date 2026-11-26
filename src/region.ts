@@ -187,7 +187,8 @@ export function receiptCurrency(
 	for (const { pattern, candidates } of CURRENCY_SYMBOLS) {
 		if (!pattern.test(text)) continue;
 		if (candidates.length === 1) return candidates[0];
-		const expected = countryCurrency(context.country) ?? context.currency;
+		// The currency the caller names outranks the one its country implies.
+		const expected = context.currency ?? countryCurrency(context.country);
 		return expected && candidates.includes(expected) ? expected : null;
 	}
 	return null;
