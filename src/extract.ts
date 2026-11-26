@@ -56,6 +56,13 @@ function tolerance(total: number, currency = "EUR"): number {
 	);
 }
 
+/** A tax named in a total's label. */
+const TAX_WORD =
+	/(?<![a-z])(?:iva|vat|tva|mwst|ust|btw|imposto|impuesto|tax|gst|kdv)(?![a-z])/i;
+/** A label that says the tax is in the amount, not that it is the amount. */
+const TAX_INCLUDED =
+	/c\/|(?<![a-z])(?:com|con|incl|inkl|ttc|with|avec|mit)(?![a-z])/i;
+
 /** How many candidates per slot the search considers. */
 const SEARCH_WIDTH = 20;
 
@@ -165,6 +172,9 @@ function priorFor(
 			score += 0.4;
 		if (namesFuelAmount(label)) score += 0.4;
 		if (/subtotal|sub total|netto|neto|liquido|base/i.test(label)) score -= 0.6;
+		// `Total IVA 11,22` is the tax and `Total s/IVA 48,78` the figure
+		// before it; `Total c/IVA 60,00` is what was paid.
+		if (TAX_WORD.test(label) && !TAX_INCLUDED.test(label)) score -= 0.6;
 	}
 	if (score < 0.35) return -Infinity;
 	if (token.glued && token.unit === null) score -= 0.1;

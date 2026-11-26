@@ -172,6 +172,19 @@ describe("numbers that are not the ones we want", () => {
 		expect(receipt.arithmeticChecked).toBe(true);
 	});
 
+	it.each([
+		["Total IVA 11,22 EUR", "TOTAL 60,00 EUR"],
+		["Valor IVA 11,22 EUR", "Valor 60,00 EUR"],
+		["Total IVA 11,22", "Total s/IVA 48,78", "Total c/IVA 60,00"],
+	])(
+		"does not take a tax total for the total when the sum cannot close: %s",
+		(...lines) => {
+			// No litres were read, so nothing checks the total but its label.
+			const receipt = read(["GALP", "GASOLEO SIMPLES", ...lines, "01/09/2026"]);
+			expect(receipt.total?.value).toBe(60);
+		},
+	);
+
 	it("does not take the change from a fifty for the total", () => {
 		const receipt = read([
 			"GALP",
