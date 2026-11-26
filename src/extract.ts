@@ -607,6 +607,13 @@ export function extractReceipt(
 		lines.slice(0, 500).map((line) => ({
 			...line,
 			text: normalizeReceiptText(line.text.slice(0, 1500)),
+			// The same bounds for the recogniser's other readings: a few, each
+			// no longer than a line, so no input can cost more than the page.
+			...(line.alternates && {
+				alternates: line.alternates
+					.slice(0, 3)
+					.map((alternate) => alternate.slice(0, 1500)),
+			}),
 		})),
 	);
 	lines = rows.lines;

@@ -119,6 +119,26 @@ describe("the recogniser's second thoughts", () => {
 		expect(receipt.total?.source).not.toBeNull();
 	});
 
+	it("reads only the recogniser's first three alternates", () => {
+		// Only the fourth says 60,64. A recogniser that returns dozens of
+		// readings per line must not make one line cost more than a page.
+		const receipt = read([
+			"GALP",
+			"SP95",
+			"31,93 L x 1,899 EUR/L",
+			[
+				"TOTAL 50,64 EUR",
+				"TOTAL 50,84 EUR",
+				"TOTAL 58,64 EUR",
+				"TOTAL 50,61 EUR",
+				"TOTAL 60,64 EUR",
+			],
+			"01/09/2026",
+		]);
+		expect(receipt.arithmeticChecked).toBe(false);
+		expect(receipt.total?.value).toBe(50.64);
+	});
+
 	it("never lets an alternate win a slot on its own", () => {
 		// Nothing balances either way. The preferred reading is what the
 		// recogniser believed, and the review screen shows that, not its doubts.
