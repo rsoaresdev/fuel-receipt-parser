@@ -724,7 +724,15 @@ export function extractReceipt(
 				? "other"
 				: "unknown";
 	const otherFills = arithmeticChecked
-		? fillsBeside(solution, quantities, prices, totals, lines, context)
+		? fillsBeside(
+				solution,
+				quantities,
+				prices,
+				totals,
+				lines,
+				context,
+				fallbackCurrency,
+			)
 		: [];
 	const date = readDate(
 		lines,
@@ -921,6 +929,7 @@ function fillsBeside(
 	totals: readonly Candidate[],
 	lines: readonly OcrLine[],
 	context: ScanContext,
+	fallbackCurrency: string | null,
 ): ReceiptFill[] {
 	const used = [solution.quantity, solution.unitPrice, solution.total]
 		.filter((c): c is Candidate => c !== null)
@@ -941,7 +950,7 @@ function fillsBeside(
 					c.token.lineIndex === q.token.lineIndex &&
 					!samePlace(c.token, q.token) &&
 					!samePlace(c.token, p.token) &&
-					balances(q, p, c, null),
+					balances(q, p, c, fallbackCurrency),
 			);
 			if (!t || !measuresFuel(q.token, p.token, lines)) continue;
 			const named = productNear(q.token, lines);
