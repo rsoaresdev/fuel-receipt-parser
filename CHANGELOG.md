@@ -4,8 +4,14 @@ All notable changes to this package are listed here. The format follows [Keep a 
 
 ## [Unreleased]
 
+### Added
+
+- `Gasóleo Evologic` and `Óptima Diesel` read as additised diesel, and `Alves Bandeira` as a station.
+- Mobi.E's `Taxa OPC` and `Taxa EGME` are fees added to the energy, so a Portuguese charging receipt that prints them can be checked.
+
 ### Fixed
 
+- A fuel named on the same line as its numbers (`GASOLEO 40,00 L x 1,600 EUR/L 64,00`) is named: `fuelLabel` is `GASOLEO` and `fuelTypeId` is `diesel_simple`. Before, both were `null`, or the label was the whole line with its numbers.
 - The sources of each fill in `otherFills` point at the caller's own lines. When the recogniser split a row in pieces they pointed at the joined rows instead, so a review screen drew the second fill's highlights on the wrong line.
 - A line that mentions `Portugal`, `Galp` or `Legal` is no longer read as a US gallon line, which had turned `12.50 9` into `12.509`.
 - `country: "BG"` prices in euros, as Bulgaria has since 1 January 2026. A receipt printed in leva (`лв.`) is still read as BGN.
