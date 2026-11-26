@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 import { CURRENCIES } from "../src/currencies.js";
 import { extractReceipt } from "../src/extract.js";
 import { normalizeReceiptText } from "../src/format.js";
-import { receiptCurrency, receiptRecognitionLanguage } from "../src/region.js";
+import {
+	countryCurrency,
+	receiptCurrency,
+	receiptRecognitionLanguage,
+} from "../src/region.js";
 import type { OcrLine, ScanContext } from "../src/types.js";
 import { receiptUnitMetadata, storedReceiptUnit } from "../src/units.js";
 
@@ -246,5 +250,9 @@ describe("reference edge cases", () => {
 		expect(normalizeReceiptText("11.482GAL @ 3.45 9")).toBe(
 			"11.482GAL @ 3.459 ",
 		);
+	});
+	it("prices Bulgaria in euros and still reads a lev receipt", () => {
+		expect(countryCurrency("BG")).toBe("EUR");
+		expect(receiptCurrency("ОБЩО 60,00 лв.", { country: "BG" })).toBe("BGN");
 	});
 });
