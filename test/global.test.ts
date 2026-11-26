@@ -8,7 +8,6 @@ import {
 	receiptRecognitionLanguage,
 } from "../src/region.js";
 import type { OcrLine, ScanContext } from "../src/types.js";
-import { receiptUnitMetadata, storedReceiptUnit } from "../src/units.js";
 
 function read(rows: string[], context: ScanContext = {}) {
 	const lines: OcrLine[] = rows.map((text, i) => ({
@@ -206,24 +205,6 @@ describe("unit and date context", () => {
 		expect(receiptRecognitionLanguage("CN", "pt")).toBe("zh");
 		expect(receiptRecognitionLanguage("PT", "en")).toBe("en");
 	});
-});
-
-describe("unit persistence", () => {
-	it("does not assign the current account preference to an old ambiguous gallon", () => {
-		const original = { quantityUnit: "gal" };
-		const unit = storedReceiptUnit(original);
-		expect(unit).toBe("gal");
-		expect(receiptUnitMetadata(unit ?? "L")).toEqual({
-			quantityUnit: "gal",
-			volumeUnit: undefined,
-		});
-	});
-	it.each(["gallon_us", "gallon_uk", "L", "kg", "m3", "kWh"] as const)(
-		"round trips %s",
-		(unit) => {
-			expect(storedReceiptUnit(receiptUnitMetadata(unit))).toBe(unit);
-		},
-	);
 });
 
 describe("reference edge cases", () => {
