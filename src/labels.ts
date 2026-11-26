@@ -614,6 +614,11 @@ const FEE: readonly string[] = [
 	"tarifa de sesión",
 	"costo di sessione",
 	"commissione",
+	// Mobi.E, the Portuguese network: the operator's and the network's charges.
+	"taxa opc",
+	"tarifa opc",
+	"taxa egme",
+	"tarifa egme",
 ];
 
 /** Whether the text names a fee charged on top of the energy. */
