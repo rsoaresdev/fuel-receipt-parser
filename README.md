@@ -116,14 +116,14 @@ if (wantsSecondPass(reading)) {
 
 ### `extractReceipt(lines, context?): ReceiptReading`
 
-`lines` can arrive in any order. At most 500 lines of 1,500 characters are read, and a label is looked for in the 64 characters before a number, so even the largest input that passes these limits is read in under a second on a laptop. A real receipt takes a few milliseconds.
+`lines` can arrive in any order. At most 500 lines of 1,500 characters are read, with up to three `alternates` per line cut to the same length, and a label is looked for in the 64 characters before a number, so even the largest input that passes these limits is read in under a second on a laptop. A real receipt takes a few milliseconds.
 
 `context` is optional and holds what the paper does not say:
 
 | Field          | Type             | Use                                                                                           |
 | -------------- | ---------------- | --------------------------------------------------------------------------------------------- |
 | `country`      | `string`         | ISO 3166 country of purchase, for example `"PT"`. Decides the currency of a bare `$` or `kr`. |
-| `currency`     | `string`         | ISO 4217 code to assume when the receipt prints none.                                         |
+| `currency`     | `string`         | ISO 4217 code to assume when the receipt prints none. Also settles a bare `$` or `kr` ahead of `country`. |
 | `quantityUnit` | `ReceiptUnit`    | Unit to assume when the receipt prints none.                                                  |
 | `brands`       | `string[]`       | Station names to look for. Defaults to `KNOWN_BRANDS`.                                        |
 | `dateOrder`    | `"dmy" \| "mdy" \| "ymd"` | How the reader's region writes numeric dates, the last resort for `08/09/2026`. `regionDateOrder(country)` gives it. |
