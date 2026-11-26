@@ -67,10 +67,6 @@ const SEARCH_WIDTH = 20;
 const LABEL_REACH = 64;
 
 /**
- * The label nearest a number: what precedes it, else the column heading above
- * it, else the start of its line.
- */
-/**
  * The amount for the fuel alone, on a receipt that also sells a car wash or a
  * snack: `FUEL 77.99`, `UNLEADED 77.99` above `TOTAL 85.99`.
  */
@@ -82,6 +78,10 @@ function namesFuelAmount(label: string): boolean {
 	);
 }
 
+/**
+ * The label nearest a number: what precedes it, else the column heading above
+ * it, else the start of its line.
+ */
 function contextFor(token: NumberToken, lines: readonly OcrLine[]): string {
 	const before = token.before.trim();
 	if (token.heading && !/\p{L}/u.test(before)) return token.heading;
