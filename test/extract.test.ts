@@ -20,6 +20,7 @@
 import { describe, expect, it } from "vitest";
 
 import { extractReceipt } from "../src/extract.js";
+import { fuelTypeIdFor } from "../src/labels.js";
 import { readings, tokenize } from "../src/numbers.js";
 import type { OcrLine } from "../src/types.js";
 
@@ -171,6 +172,19 @@ describe("numbers that are not the ones we want", () => {
 		expect(receipt.total?.value).toBe(36);
 		expect(receipt.arithmeticChecked).toBe(true);
 	});
+
+	it.each([
+		["Total IVA 11,22 EUR", "TOTAL 60,00 EUR"],
+		["Valor IVA 11,22 EUR", "Valor 60,00 EUR"],
+		["Total IVA 11,22", "Total s/IVA 48,78", "Total c/IVA 60,00"],
+	])(
+		"does not take a tax total for the total when the sum cannot close: %s",
+		(...lines) => {
+			// No litres were read, so nothing checks the total but its label.
+			const receipt = read(["GALP", "GASOLEO SIMPLES", ...lines, "01/09/2026"]);
+			expect(receipt.total?.value).toBe(60);
+		},
+	);
 
 	it("does not take the change from a fifty for the total", () => {
 		const receipt = read([
@@ -443,6 +457,40 @@ describe("what it does with nothing", () => {
 	});
 });
 
+describe("a product printed on the line it measures", () => {
+	it.each([
+		["GASOLEO 40,00 L x 1,600 EUR/L 64,00", "GASOLEO", "diesel_simple"],
+		["SP95 31,93 L x 1,899 EUR/L 60,64", "SP95", "gasoline_95"],
+		[
+			"Gasolina 95 Simples 31,93L 1,899 60,64",
+			"Gasolina 95 Simples",
+			"gasoline_95",
+		],
+	])("names the fuel in %s", (line, label, fuel) => {
+		const receipt = read(["GALP", line, "TOTAL 64,00", "01/09/2026"]);
+		expect(receipt.fuelLabel?.value).toBe(label);
+		expect(receipt.fuelTypeId).toBe(fuel);
+	});
+});
+
+describe("Portuguese premium diesels and stations", () => {
+	it.each(["Gasoleo Evologic", "Óptima Diesel", "Gasóleo Aditivado"])(
+		"reads %s as an additised diesel",
+		(name) => {
+			expect(fuelTypeIdFor(name)).toBe("diesel_aditivado");
+		},
+	);
+	it("keeps a plain diesel plain", () => {
+		expect(fuelTypeIdFor("Gasoleo Simples")).toBe("diesel_simple");
+		expect(fuelTypeIdFor("Diesel Star")).toBe("diesel_simple");
+	});
+	it.each(["ALVES BANDEIRA"])("names the station %s", (brand) => {
+		expect(
+			read([brand, "Lisboa", "TOTAL 64,00", "01/09/2026"]).place,
+		).not.toBeNull();
+	});
+});
+
 describe("the odometer, which is nearly always handwritten", () => {
 	it("takes a printed reading when the receipt labels one", () => {
 		const receipt = read([
@@ -454,6 +502,19 @@ describe("the odometer, which is nearly always handwritten", () => {
 			"01/09/2026",
 		]);
 		expect(receipt.odometer?.value).toBe(148230);
+	});
+
+	it("does not take a loyalty scheme's miles for a reading", () => {
+		const receipt = read([
+			"GALP",
+			"GASOLEO 40,00 L x 1,500 EUR/L 60,00",
+			"TOTAL 60,00 EUR",
+			"01/09/2026",
+			"OBRIGADO",
+			"Miles & More 123456",
+		]);
+		expect(receipt.arithmeticChecked).toBe(true);
+		expect(receipt.odometer).toBeNull();
 	});
 
 	it("leaves it empty rather than guess", () => {

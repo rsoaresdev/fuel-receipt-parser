@@ -23,7 +23,8 @@ import type { ScanContext } from "./types.js";
 
 const COUNTRY_CURRENCIES: Record<string, string> = Object.fromEntries(
 	Object.entries({
-		EUR: "PT ES FR IT DE AT BE NL IE FI LU MT CY EE LV LT SK SI GR HR AD MC SM VA",
+		// Bulgaria joined the euro on 1 January 2026; older receipts still name лв.
+		EUR: "PT ES FR IT DE AT BE NL IE FI LU MT CY EE LV LT SK SI GR HR BG AD MC SM VA",
 		GBP: "GB GG JE IM",
 		USD: "US EC SV PA PR TL",
 		AUD: "AU KI NR TV",
@@ -40,7 +41,6 @@ const COUNTRY_CURRENCIES: Record<string, string> = Object.fromEntries(
 		CZK: "CZ",
 		HUF: "HU",
 		RON: "RO",
-		BGN: "BG",
 		RSD: "RS",
 		TRY: "TR",
 		UAH: "UA",
@@ -187,7 +187,8 @@ export function receiptCurrency(
 	for (const { pattern, candidates } of CURRENCY_SYMBOLS) {
 		if (!pattern.test(text)) continue;
 		if (candidates.length === 1) return candidates[0];
-		const expected = countryCurrency(context.country) ?? context.currency;
+		// The currency the caller names outranks the one its country implies.
+		const expected = context.currency ?? countryCurrency(context.country);
 		return expected && candidates.includes(expected) ? expected : null;
 	}
 	return null;

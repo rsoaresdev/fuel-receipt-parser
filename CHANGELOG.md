@@ -2,6 +2,33 @@
 
 All notable changes to this package are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- `Gasóleo Evologic` and `Óptima Diesel` read as additised diesel, and `Alves Bandeira` as a station.
+- Mobi.E's `Taxa OPC` and `Taxa EGME` are fees added to the energy, so a Portuguese charging receipt that prints them can be checked.
+
+### Fixed
+
+- A fuel named on the same line as its numbers (`GASOLEO 40,00 L x 1,600 EUR/L 64,00`) is named: `fuelLabel` is `GASOLEO` and `fuelTypeId` is `diesel_simple`. Before, both were `null`, or the label was the whole line with its numbers.
+- The sources of each fill in `otherFills` point at the caller's own lines. When the recogniser split a row in pieces they pointed at the joined rows instead, so a review screen drew the second fill's highlights on the wrong line.
+- A line that mentions `Portugal`, `Galp` or `Legal` is no longer read as a US gallon line, which had turned `12.50 9` into `12.509`.
+- `country: "BG"` prices in euros, as Bulgaria has since 1 January 2026. A receipt printed in leva (`лв.`) is still read as BGN.
+- `currency` passed by the caller now settles an ambiguous symbol such as `$` ahead of the currency implied by `country`.
+- A second fill on the same receipt is checked to the receipt's own currency precision, not always to the euro cent.
+- `Total IVA 11,22` or `Valor IVA 11,22` is no longer taken for the total when the sum cannot close. A total whose label names a tax ranks below one that does not, unless the label says the tax is included (`Total c/IVA`, `inkl. MwSt`, `TTC`).
+- `Miles & More 123456` and other loyalty schemes that count miles or points are no longer read as an odometer in miles.
+- A recogniser's `alternates` are bounded like the lines themselves: the first three per line, each cut to 1500 characters. A line with dozens of very long alternates could run the parser out of memory.
+
+### Changed
+
+- About 20 times faster on a typical receipt: the solver asked whether each total names the fuel once per pair of candidates, not once per total.
+
+### Removed
+
+- `src/units.ts` and the `decimalInput`, `localNumber` and `localReceiptNumber` helpers in `src/format.ts`. None was exported from the package or used by it.
+
 ## [1.1.2] - 2026-11-01
 
 ### Fixed

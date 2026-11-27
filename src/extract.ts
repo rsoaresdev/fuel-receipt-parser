@@ -56,6 +56,13 @@ function tolerance(total: number, currency = "EUR"): number {
 	);
 }
 
+/** A tax named in a total's label. */
+const TAX_WORD =
+	/(?<![a-z])(?:iva|vat|tva|mwst|ust|btw|imposto|impuesto|tax|gst|kdv)(?![a-z])/i;
+/** A label that says the tax is in the amount, not that it is the amount. */
+const TAX_INCLUDED =
+	/c\/|(?<![a-z])(?:com|con|incl|inkl|ttc|with|avec|mit)(?![a-z])/i;
+
 /** How many candidates per slot the search considers. */
 const SEARCH_WIDTH = 20;
 
@@ -66,10 +73,6 @@ const SEARCH_WIDTH = 20;
  */
 const LABEL_REACH = 64;
 
-/**
- * The label nearest a number: what precedes it, else the column heading above
- * it, else the start of its line.
- */
 /**
  * The amount for the fuel alone, on a receipt that also sells a car wash or a
  * snack: `FUEL 77.99`, `UNLEADED 77.99` above `TOTAL 85.99`.
@@ -82,6 +85,10 @@ function namesFuelAmount(label: string): boolean {
 	);
 }
 
+/**
+ * The label nearest a number: what precedes it, else the column heading above
+ * it, else the start of its line.
+ */
 function contextFor(token: NumberToken, lines: readonly OcrLine[]): string {
 	const before = token.before.trim();
 	if (token.heading && !/\p{L}/u.test(before)) return token.heading;
@@ -165,6 +172,9 @@ function priorFor(
 			score += 0.4;
 		if (namesFuelAmount(label)) score += 0.4;
 		if (/subtotal|sub total|netto|neto|liquido|base/i.test(label)) score -= 0.6;
+		// `Total IVA 11,22` is the tax and `Total s/IVA 48,78` the figure
+		// before it; `Total c/IVA 60,00` is what was paid.
+		if (TAX_WORD.test(label) && !TAX_INCLUDED.test(label)) score -= 0.6;
 	}
 	if (score < 0.35) return -Infinity;
 	if (token.glued && token.unit === null) score -= 0.1;
@@ -259,6 +269,10 @@ function solve(
 	let best: Solution | null = null;
 	let bestScore = -Infinity;
 	const closing: Solution[] = [];
+	// Asked once per total here, not once per pair in the loop below.
+	const fuelAmounts = new Set(
+		totals.filter((c) => namesFuelAmount(contextFor(c.token, lines))),
+	);
 	const closes = (q: Candidate, p: Candidate, t: Candidate | null) =>
 		!!t &&
 		!samePlace(t.token, q.token) &&
@@ -279,7 +293,7 @@ function solve(
 							!c.token.alternate &&
 							(c.token.lineIndex === q.token.lineIndex ||
 								c.token.lineIndex === p.token.lineIndex ||
-								namesFuelAmount(contextFor(c.token, lines))) &&
+								fuelAmounts.has(c)) &&
 							closes(q, p, c),
 					) ?? printedTotal);
 			const balanced = closes(q, p, t);
@@ -494,6 +508,8 @@ function productAt(
 	const whole = line.text.trim();
 	// `Bomba 4  GASOLEO`: the pump number refuses the line, not the fuel.
 	const text = [
+		// `GASOLEO 40,00 L x 1,600 EUR/L 64,00`: the name before the numbers.
+		whole.replace(/\s+\d+[.,]\d.*$/u, ""),
 		whole,
 		...whole.split(/\s{2,}/),
 		whole.replace(/^\p{L}+\.?\s*#?\s*\d+\s+/u, ""),
@@ -548,6 +564,10 @@ function placeOf(
 const ODOMETER_WORD =
 	/odomet|odómet|kilomet|quilomet|quilómet|chilomet|conta-quil|mileage|kmstand|tachostand/i;
 
+/** A loyalty scheme whose name says miles or points: `Miles & More 123456`. */
+const LOYALTY =
+	/miles\s*(?:&|and|\+|e|und|et|y)\s*more|avios|payback|pontos|points|punkte|puntos/i;
+
 /** A line that names a road: the words, or a designation like `A-4` or `N-IV`. */
 const ROAD_MARKER =
 	/\b(?:autovia|autovía|autopista|autostrada|autoestrada|autobahn|carretera|ctra|estrada|rodovia|strada|route|highway|hwy|salida|saída|uscita|ausfahrt|sortie|exit|pk)\b|\b(?:A|AP|N|E|M|IC|IP|EN|SS|RN|BR|CR|D|B)-(?:\d{1,3}|[IVX]{1,5})\b/i;
@@ -569,7 +589,7 @@ function odometerOf(
 	const header = Math.ceil(lines.length / 3);
 	for (const token of tokens) {
 		const label = contextFor(token, lines);
-		if (!names("odometer", label)) {
+		if (!names("odometer", label) || LOYALTY.test(label)) {
 			continue;
 		}
 		// `KM 245` in a station's address is a road marker, not a reading: a
@@ -603,6 +623,13 @@ export function extractReceipt(
 		lines.slice(0, 500).map((line) => ({
 			...line,
 			text: normalizeReceiptText(line.text.slice(0, 1500)),
+			// The same bounds for the recogniser's other readings: a few, each
+			// no longer than a line, so no input can cost more than the page.
+			...(line.alternates && {
+				alternates: line.alternates
+					.slice(0, 3)
+					.map((alternate) => alternate.slice(0, 1500)),
+			}),
 		})),
 	);
 	lines = rows.lines;
@@ -671,17 +698,15 @@ export function extractReceipt(
 	// A sum that closes proves the arithmetic, not the purchase: a shop line
 	// (`2 x 5,00 10,00`) closes as well as the pump's. It counts as checked
 	// only when the paper also says the triple measures fuel or energy.
+	const currency = currencyOf(lines, context);
+	const moneyCurrency = currency?.value ?? fallbackCurrency;
 	const discount = discountOf(
 		tokens,
 		lines,
 		solution.quantity?.value,
-		currencyOf(lines, context)?.value ?? fallbackCurrency,
+		moneyCurrency,
 	);
-	const fees = feesOf(
-		tokens,
-		lines,
-		currencyOf(lines, context)?.value ?? fallbackCurrency,
-	);
+	const fees = feesOf(tokens, lines, moneyCurrency);
 	// A total printed after a printed discount or fee: what the pump measured,
 	// less what came off and plus what was added, is what was paid. That total
 	// wins over the amount on the fuel line, which is the energy alone.
@@ -724,7 +749,15 @@ export function extractReceipt(
 				? "other"
 				: "unknown";
 	const otherFills = arithmeticChecked
-		? fillsBeside(solution, quantities, prices, totals, lines, context)
+		? fillsBeside(
+				solution,
+				quantities,
+				prices,
+				totals,
+				lines,
+				context,
+				fallbackCurrency,
+			)
 		: [];
 	const date = readDate(
 		lines,
@@ -741,7 +774,7 @@ export function extractReceipt(
 		unitPrice: conflictingRate
 			? null
 			: fieldFrom(solution.unitPrice, arithmeticChecked),
-		currency: currencyOf(lines, context),
+		currency,
 		fuelLabel: product,
 		fuelTypeId:
 			(product ? fuelTypeIdFor(product.value) : null) ??
@@ -921,6 +954,7 @@ function fillsBeside(
 	totals: readonly Candidate[],
 	lines: readonly OcrLine[],
 	context: ScanContext,
+	fallbackCurrency: string | null,
 ): ReceiptFill[] {
 	const used = [solution.quantity, solution.unitPrice, solution.total]
 		.filter((c): c is Candidate => c !== null)
@@ -941,7 +975,7 @@ function fillsBeside(
 					c.token.lineIndex === q.token.lineIndex &&
 					!samePlace(c.token, q.token) &&
 					!samePlace(c.token, p.token) &&
-					balances(q, p, c, null),
+					balances(q, p, c, fallbackCurrency),
 			);
 			if (!t || !measuresFuel(q.token, p.token, lines)) continue;
 			const named = productNear(q.token, lines);
@@ -969,14 +1003,21 @@ function withCallerLines(
 	origin: (lineIndex: number, box: FieldSource["box"]) => number,
 	reading: ReceiptReading,
 ): ReceiptReading {
-	const out: Record<string, unknown> = { ...reading };
-	for (const [key, field] of Object.entries(reading)) {
-		const source = (field as ScannedField<unknown> | null)?.source;
-		if (!source) continue;
-		out[key] = {
-			...field,
-			source: { ...source, lineIndex: origin(source.lineIndex, source.box) },
-		};
-	}
-	return out as unknown as ReceiptReading;
+	const remap = <T extends object>(record: T): T => {
+		const out: Record<string, unknown> = { ...(record as object) };
+		for (const [key, field] of Object.entries(record)) {
+			const source = (field as ScannedField<unknown> | null)?.source;
+			if (!source) continue;
+			out[key] = {
+				...field,
+				source: { ...source, lineIndex: origin(source.lineIndex, source.box) },
+			};
+		}
+		return out as unknown as T;
+	};
+	return {
+		...remap(reading),
+		// Each fill carries boxes of its own, read off the same joined rows.
+		otherFills: reading.otherFills?.map(remap),
+	};
 }

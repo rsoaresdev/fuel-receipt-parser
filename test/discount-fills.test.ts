@@ -175,3 +175,21 @@ describe("each fill's own product", () => {
 		expect(fuels).toContainEqual([10, "adblue"]);
 	});
 });
+
+describe("a Mobi.E charge", () => {
+	it("adds the operator's and the network's charges to the energy", () => {
+		const r = read([
+			"MOBI.E",
+			"Carregamento",
+			"Energia 25,000 kWh",
+			"Preco 0,30 EUR/kWh",
+			"Taxa OPC 1,20",
+			"Taxa EGME 0,30",
+			"Total 9,00 EUR",
+			"01/09/2026",
+		]);
+		expect(r.fees?.value).toBe(1.5);
+		expect(r.total?.value).toBe(9);
+		expect(r.arithmeticChecked).toBe(true);
+	});
+});

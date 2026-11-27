@@ -330,19 +330,24 @@ function unionBox(a: TextBox, b: TextBox): TextBox {
 	};
 }
 
+const IS_MASS = new RegExp(`^(?:${MASS})$`, "i");
+const IS_GAS_VOLUME = new RegExp(`^(?:${GAS_VOLUME})$`, "i");
+const IS_KWH = new RegExp(`^(?:${KWH})$`, "i");
+const IS_GALLON = new RegExp(`^(?:${GALLON})$`, "i");
+
 function rateKind(word: string): TokenUnit {
-	if (new RegExp(`^(?:${MASS})$`, "i").test(word)) return "per-kg";
-	if (new RegExp(`^(?:${GAS_VOLUME})$`, "i").test(word)) return "per-m3";
-	if (new RegExp(`^(?:${KWH})$`, "i").test(word)) return "per-kwh";
-	if (new RegExp(`^(?:${GALLON})$`, "i").test(word)) return "per-gallon";
+	if (IS_MASS.test(word)) return "per-kg";
+	if (IS_GAS_VOLUME.test(word)) return "per-m3";
+	if (IS_KWH.test(word)) return "per-kwh";
+	if (IS_GALLON.test(word)) return "per-gallon";
 	return "per-litre";
 }
 
 function plainKind(word: string): TokenUnit {
-	if (new RegExp(`^(?:${MASS})$`, "i").test(word)) return "mass";
-	if (new RegExp(`^(?:${GAS_VOLUME})$`, "i").test(word)) return "volume-gas";
-	if (new RegExp(`^(?:${KWH})$`, "i").test(word)) return "kwh";
-	if (new RegExp(`^(?:${GALLON})$`, "i").test(word)) return "gallon";
+	if (IS_MASS.test(word)) return "mass";
+	if (IS_GAS_VOLUME.test(word)) return "volume-gas";
+	if (IS_KWH.test(word)) return "kwh";
+	if (IS_GALLON.test(word)) return "gallon";
 	return "litre";
 }
 

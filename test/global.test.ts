@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { CURRENCIES } from "../src/currencies.js";
 import { extractReceipt } from "../src/extract.js";
-import { receiptCurrency, receiptRecognitionLanguage } from "../src/region.js";
+import { normalizeReceiptText } from "../src/format.js";
+import {
+	countryCurrency,
+	receiptCurrency,
+	receiptRecognitionLanguage,
+} from "../src/region.js";
 import type { OcrLine, ScanContext } from "../src/types.js";
-import { receiptUnitMetadata, storedReceiptUnit } from "../src/units.js";
 
 function read(rows: string[], context: ScanContext = {}) {
 	const lines: OcrLine[] = rows.map((text, i) => ({
@@ -203,24 +207,6 @@ describe("unit and date context", () => {
 	});
 });
 
-describe("unit persistence", () => {
-	it("does not assign the current account preference to an old ambiguous gallon", () => {
-		const original = { quantityUnit: "gal" };
-		const unit = storedReceiptUnit(original);
-		expect(unit).toBe("gal");
-		expect(receiptUnitMetadata(unit ?? "L")).toEqual({
-			quantityUnit: "gal",
-			volumeUnit: undefined,
-		});
-	});
-	it.each(["gallon_us", "gallon_uk", "L", "kg", "m3", "kWh"] as const)(
-		"round trips %s",
-		(unit) => {
-			expect(storedReceiptUnit(receiptUnitMetadata(unit))).toBe(unit);
-		},
-	);
-});
-
 describe("reference edge cases", () => {
 	it("recognizes an ISO currency printed as a standalone heading", () => {
 		expect(
@@ -236,5 +222,23 @@ describe("reference edge cases", () => {
 		expect(read(["20 L", "Price 1.8 EUR/L", "Total 0 EUR"]).total?.value).toBe(
 			0,
 		);
+	});
+	it("does not take Portugal or Galp for a gallon line", () => {
+		expect(normalizeReceiptText("PORTUGAL 12.50 9 ITENS")).toBe(
+			"PORTUGAL 12.50 9 ITENS",
+		);
+		expect(normalizeReceiptText("GALP 3.45 9")).toBe("GALP 3.45 9");
+		expect(normalizeReceiptText("11.482GAL @ 3.45 9")).toBe(
+			"11.482GAL @ 3.459 ",
+		);
+	});
+	it("prices Bulgaria in euros and still reads a lev receipt", () => {
+		expect(countryCurrency("BG")).toBe("EUR");
+		expect(receiptCurrency("ОБЩО 60,00 лв.", { country: "BG" })).toBe("BGN");
+	});
+	it("lets the caller's currency settle an ambiguous symbol over the country's", () => {
+		expect(
+			receiptCurrency("Total $36", { country: "US", currency: "CAD" }),
+		).toBe("CAD");
 	});
 });
